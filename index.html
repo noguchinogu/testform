@@ -34,7 +34,7 @@
 
   <script>
     // ★ここにGASのURLを貼り付けてください
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbxjmdHRQk1wMeHb_H7wX0zzMo1X0eclR4px6IJtSvJFKyVQIKG1_wzIIiYWkSQ9t8x6Tw/exec"; 
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwBI9ibGQu8OrVFFUgJmpnvCGJmT2cPniaFrW26tZAF9YOQ7C0XWeWeRlHEWsdvf7_EMQ/exec"; 
 
     let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream;
 
@@ -106,12 +106,12 @@
       document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2>";
       document.getElementById('loading').style.display = 'block';
       
-      const result = await callGas({ action: "grade", row: myRow, formNum: 1 });
+      const res = await callGas({ action: "grade", row: myRow, formNum: 1 });
       
-      // 【ここを修正】データがオブジェクトで届いても数字を抽出できるようにする
-      const score = (result && typeof result === 'object') ? result.total : result;
+      // 【ここを修正】オブジェクトの中から「total」という数字だけを取り出す
+      const score = (res && typeof res === 'object') ? res.total : res;
       
-      let h = `<h2>点数: ${score}点</h2>`;
+      let h = "<h2>点数: " + score + "点</h2>";
       h += (Number(score) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
       document.getElementById('loading').innerHTML = h;
     }
