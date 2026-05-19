@@ -30,35 +30,37 @@
     <button onclick="next()">回答を終了して次へ</button>
   </div>
 
-  <div id="loading" style="display:none;"><h2>処理中...</h2></div>
+  <div id="loading" style="display:none;"><h2>処理中...</h2><p id="load-msg"></p></div>
 
   <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbx-zzvUd6hZoaUDbWf2TEV399jm92LyHh7zvTOpMkz1I-U6qyUWOgCrG1LMh4EA8YNatw/exec"; 
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwkqhMJJRrql62FZKKSQjOXHH6WcYWsV9kzRrYh1fzCvVQgbdJlcgNZ47OxC_-b6t_4SQ/exec"; 
 
     let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream;
 
     async function callGas(data) {
       const response = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
-      return await response.json();
+      const res = await response.json();
+      if (res.success === false) {
+        alert("GASエラー: " + (res.error || res.message));
+        return res;
+      }
+      return res;
     }
 
     async function start() {
       userInfo = { email: document.getElementById('email').value.trim(), id: document.getElementById('id').value.trim(), name: document.getElementById('name').value.trim() };
       if(!userInfo.email || !userInfo.id) return alert("入力してください");
-
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const res = await callGas({ action: "register", userData: userInfo, formNum: 1 });
-        if(!res.success) return alert(res.message);
-        
-        myRow = res.row; // ここでしっかり行番号を保存する
-        document.getElementById('setup').style.display='none';
-        document.getElementById('test').style.display='block';
-        document.getElementById('bar-container').style.display='block';
-        setupRecorder();
-      } catch (e) {
-        alert("マイクを許可してください。");
-      }
+        if(res.success) {
+          myRow = res.row;
+          document.getElementById('setup').style.display='none';
+          document.getElementById('test').style.display='block';
+          document.getElementById('bar-container').style.display='block';
+          setupRecorder();
+        }
+      } catch (e) { alert("マイクを許可してください。"); }
     }
 
     function setupRecorder() {
@@ -86,34 +88,34 @@
     async function next(auto=false) {
       if(!auto && !confirm("次へ進みますか？")) return;
       document.getElementById('loading').style.display = 'block';
+      document.getElementById('load-msg').innerText = "音声を保存中...";
       recorder.stop();
       recorder.onstop = async () => {
         const reader = new FileReader();
         reader.readAsDataURL(new Blob(chunks, {type:'audio/webm'}));
         reader.onloadend = async () => {
-          // myRow を確実に送る
-          await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });
+          const res = await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });
           document.getElementById('loading').style.display = 'none';
-          if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; runTimer(); } 
-          else { finish(); }
+          if(res.success) {
+            if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; runTimer(); } 
+            else { finish(); }
+          }
         };
       };
     }
 
     async function finish() {
-      if(stream) stream.getTracks().forEach(t => t.stop());
+      if (stream) stream.getTracks().forEach(t => t.stop());
       document.getElementById('test').style.display = 'none';
       document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2>";
       document.getElementById('loading').style.display = 'block';
-      
-      const score = await callGas({ action: "grade", row: myRow, formNum: 1 });
-      
-      // scoreがオブジェクトなら中身を、数字ならそのまま使う
-      const finalScore = (score && typeof score === 'object') ? (score.total || 0) : score;
-
-      let h = `<h2>点数: ${finalScore}点</h2>`;
-      h += (Number(finalScore) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
-      document.getElementById('loading').innerHTML = h;
+      const res = await callGas({ action: "grade", row: myRow, formNum: 1 });
+      if(res.success) {
+        const score = res.score;
+        let h = `<h2>点数: ${score}点</h2>`;
+        h += (Number(score) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
+        document.getElementById('loading').innerHTML = h;
+      }
     }
   </script>
 </body>
