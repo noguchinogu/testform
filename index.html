@@ -1,1 +1,115 @@
-test
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>フォーム② (音声回答)</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f9f9f9; text-align: center; }
+    .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .timer { font-size: 32px; font-weight: bold; color: #e74c3c; margin-bottom: 20px; }
+    button { padding: 15px 30px; background: #1a73e8; color: white; border: none; cursor: pointer; border-radius: 5px; font-size: 18px; }
+    input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    #bar-container { width: 100%; height: 10px; background: #eee; border-radius: 5px; margin: 20px 0; display:none; }
+    #bar { width: 0%; height: 100%; background: #ff5252; transition: 0.1s; }
+  </style>
+</head>
+<body>
+  <div id="setup" class="card">
+    <h2>(26)既存添削者フォーム②</h2>
+    <input type="text" id="email" placeholder="メールアドレス">
+    <input type="text" id="id" placeholder="ID下6桁">
+    <input type="text" id="name" placeholder="氏名">
+    <button onclick="start()">認証して録音開始</button>
+  </div>
+
+  <div id="test" style="display:none;" class="card">
+    <div class="timer" id="time">02:30</div>
+    <div id="bar-container"><div id="bar"></div></div>
+    <h3 id="sec-title">セクション1</h3>
+    <button onclick="next()">回答を終了して次へ</button>
+  </div>
+
+  <div id="loading" style="display:none;"><h2>処理中...</h2></div>
+
+  <script>
+    // ★ここにGASのURLを貼り付けてください
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzLchkvcBJS7JHYbkTK2wkFhINWK7a08j2Fesu_1dkyupqNVQZ2BokECljiNE8U8hQT9w/exec"; 
+
+    let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream;
+
+    async function callGas(data) {
+      const response = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
+      return await response.json();
+    }
+
+    async function start() {
+      userInfo = { email: document.getElementById('email').value.trim(), id: document.getElementById('id').value.trim(), name: document.getElementById('name').value.trim() };
+      if(!userInfo.email || !userInfo.id) return alert("入力してください");
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const res = await callGas({ action: "register", userData: userInfo, formNum: 1 });
+        if(!res.success) return alert(res.message);
+        
+        myRow = res.row;
+        document.getElementById('setup').style.display='none';
+        document.getElementById('test').style.display='block';
+        document.getElementById('bar-container').style.display='block';
+        setupRecorder();
+      } catch (e) {
+        alert("マイクを許可してください。");
+      }
+    }
+
+    function setupRecorder() {
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = e => chunks.push(e.data);
+      const ctx = new AudioContext();
+      const ana = ctx.createAnalyser();
+      ctx.createMediaStreamSource(stream).connect(ana);
+      const data = new Uint8Array(ana.frequencyBinCount);
+      const upd = () => { ana.getByteFrequencyData(data); document.getElementById('bar').style.width = (data.reduce((a,b)=>a+b)/data.length)*2.5+"%"; requestAnimationFrame(upd); };
+      upd();
+      runTimer();
+    }
+
+    function runTimer() {
+      chunks = []; recorder.start();
+      let left = 150;
+      clearInterval(timer);
+      timer = setInterval(() => {
+        document.getElementById('time').innerText = Math.floor(left/60)+":"+(left%60).toString().padStart(2,'0');
+        if(left-- <= 0) { clearInterval(timer); next(true); }
+      }, 1000);
+    }
+
+    async function next(auto=false) {
+      if(!auto && !confirm("次へ進みますか？")) return;
+      document.getElementById('loading').style.display = 'block';
+      recorder.stop();
+      recorder.onstop = async () => {
+        const reader = new FileReader();
+        reader.readAsDataURL(new Blob(chunks, {type:'audio/webm'}));
+        reader.onloadend = async () => {
+          await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });
+          document.getElementById('loading').style.display = 'none';
+          if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; runTimer(); } 
+          else { finish(); }
+        };
+      };
+    }
+
+    async function finish() {
+      stream.getTracks().forEach(t => t.stop());
+      document.getElementById('test').style.display = 'none';
+      document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2>";
+      document.getElementById('loading').style.display = 'block';
+      const score = await callGas({ action: "grade", row: myRow, formNum: 1 });
+      let h = `<h2>点数: ${score}点</h2>`;
+      h += (score >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
+      document.getElementById('loading').innerHTML = h;
+    }
+  </script>
+</body>
+</html>
