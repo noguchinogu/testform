@@ -90,7 +90,8 @@
         document.getElementById('test-view').style.display = 'block';
         startRecording();
       } else {
-        alert(res.message);
+        // ★修正ポイント：エラーの詳細を確実に表示する
+        alert(res.message || res.error || "通信エラーが発生しました。");
         document.getElementById('auth-status').style.display = 'none';
         stream.getTracks().forEach(t => t.stop()); // マイク解放
       }
