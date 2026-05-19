@@ -6,7 +6,7 @@
   <title>(26)研修フォーム② - 音声テスト</title>
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; }
     h2 { color: #1a73e8; margin-bottom: 20px; }
     input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
     button { padding: 15px 30px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; font-weight: bold; width: 90%; transition: 0.3s; }
@@ -18,9 +18,30 @@
     .loader { display: inline-block; width: 30px; height: 30px; border: 4px solid #f3f3f3; border-top: 4px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite; margin-top: 10px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .status-text { font-size: 18px; font-weight: bold; margin-top: 15px; color: #555; }
+
+    /* ★追加：カスタム確認ポップアップのデザイン */
+    #custom-confirm { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
+    .confirm-box { background: white; padding: 30px; border-radius: 10px; width: 80%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    .confirm-box p { font-size: 18px; font-weight: bold; margin-bottom: 25px; }
+    .btn-wrap { display: flex; justify-content: space-between; }
+    .btn-yes { background: #e53935; width: 48%; }
+    .btn-yes:hover { background: #c62828; }
+    .btn-no { background: #757575; width: 48%; }
+    .btn-no:hover { background: #616161; }
   </style>
 </head>
 <body>
+
+<!-- ★追加：自作の確認ポップアップ画面 -->
+<div id="custom-confirm">
+  <div class="confirm-box">
+    <p>このセクションの回答を終了して次に進みますか？<br><span style="font-size:14px; color:#666; font-weight:normal;">(時間は進み続けます)</span></p>
+    <div class="btn-wrap">
+      <button class="btn-yes" onclick="executeNext()">はい</button>
+      <button class="btn-no" onclick="closeConfirm()">いいえ</button>
+    </div>
+  </div>
+</div>
 
 <div class="container">
   <!-- 認証画面 -->
@@ -44,7 +65,7 @@
     <button id="next-btn" onclick="nextSection(false)">回答を終了して次へ</button>
   </div>
 
-  <!-- ロード画面（保存・採点中） -->
+  <!-- ロード画面 -->
   <div id="loading-view" style="display:none;">
     <h2>処理中...</h2>
     <div class="loader"></div>
@@ -63,7 +84,7 @@
   const GAS_URL = "https://script.google.com/macros/s/AKfycbw7qFaHwyrnai9yyegF8yW8ZaSRG1zFQngG2BY1EvYGczo4eljSw8TG8wcOouuoC2U-/exec"; 
 
   let user = {}, stream, recorder, chunks = [], cur = 1, timeLeft = 150, timerInterval;
-  let uploadPromises = []; // ★バックグラウンド処理の管理箱
+  let uploadPromises = []; 
 
   async function callGas(data) {
     const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
@@ -124,16 +145,32 @@
       let m = Math.floor(timeLeft / 60);
       let s = timeLeft % 60;
       document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
-      if (timeLeft <= 0) nextSection(true);
+      
+      // 時間切れ時の処理
+      if (timeLeft <= 0) {
+        executeNext(); // 強制的に次へ
+      }
       timeLeft--;
     }, 1000);
   }
 
+  // ★変更：ボタンを押した時は、ブラウザのconfirmではなく自作ポップアップを出す
   function nextSection(isAuto) {
-    if (!isAuto && !confirm("このセクションの回答を終了して次に進みますか？")) return;
+    if (!isAuto) {
+      document.getElementById('custom-confirm').style.display = 'flex';
+    }
+  }
+
+  // ★追加：ポップアップで「いいえ」を押した時
+  function closeConfirm() {
+    document.getElementById('custom-confirm').style.display = 'none';
+  }
+
+  // ★分離：実際に次のセクションへ進む処理
+  function executeNext() {
+    document.getElementById('custom-confirm').style.display = 'none'; // ポップアップが出ていれば消す
     clearInterval(timerInterval);
     
-    // 一瞬だけロード画面を挟む
     document.getElementById('test-view').style.display = 'none';
     document.getElementById('loading-view').style.display = 'block';
     document.getElementById('loading-text').innerHTML = `セクション ${cur} を記録中...`;
@@ -142,18 +179,16 @@
       const currentSection = cur; 
       const blob = new Blob(chunks, { type: 'audio/webm' });
       
-      // ★バックグラウンドで保存と文字起こしを実行（画面は待たない）
       const uploadPromise = new Promise((resolve) => {
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
           await callGas({ action: "saveAudio", user: user, sectionNum: currentSection, audioBase64: reader.result });
-          resolve(); // 保存完了の合図
+          resolve(); 
         };
       });
       uploadPromises.push(uploadPromise);
 
-      // 保存を待たずに、即座に次のセクションを開始！
       if (cur < 5) {
         cur++;
         document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
@@ -168,10 +203,9 @@
   }
 
   async function finishTest() {
-    stream.getTracks().forEach(t => t.stop()); // マイク終了
+    stream.getTracks().forEach(t => t.stop()); 
     document.getElementById('loading-view').style.display = 'block';
     
-    // ★ここで初めて、裏で進んでいたすべての保存が終わるのを待つ
     document.getElementById('loading-text').innerHTML = "すべての音声の保存を確認しています...<br>画面を閉じないでください。";
     await Promise.all(uploadPromises);
     
