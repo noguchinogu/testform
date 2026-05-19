@@ -10,6 +10,7 @@
     .timer { font-size: 40px; font-weight: bold; color: #d9534f; margin-bottom: 20px; font-family: monospace; }
     button { padding: 15px 40px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 30px; font-size: 18px; transition: 0.3s; }
     button:hover { background: #0056b3; transform: scale(1.05); }
+    button:disabled { background: #ccc; cursor: not-allowed; }
     input { width: 100%; padding: 15px; margin-bottom: 20px; border: 2px solid #eee; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
     #bar-container { width: 100%; height: 12px; background: #eee; border-radius: 6px; margin: 25px 0; display:none; overflow: hidden; }
     #bar { width: 0%; height: 100%; background: linear-gradient(90deg, #ff7675, #d63031); transition: 0.1s; }
@@ -45,6 +46,7 @@
   </div>
 
   <script>
+    // ★ここにあなたのGASのデプロイURL（末尾が /exec のもの）を貼り付けてください
     const GAS_URL = "https://script.google.com/macros/s/AKfycbzV9ix8cmDTRm2MgrJIoHQTf_bB9_k-b0-AhnyvmaSFFEfRqUu3ylQFWvyMf1rcd9ODtQ/exec"; 
 
     let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream, timeLeft = 150;
@@ -63,24 +65,28 @@
       if(!userInfo.email || !userInfo.id) return alert("情報を正しく入力してください");
 
       try {
+        // 【修正】まず最初にマイク許可を求める（ブラウザのブロックを防ぐため）
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        document.getElementById('setup').style.display='none';
-        document.getElementById('loading').style.display='block';
+        
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('loading').style.display = 'block';
 
         const res = await callGas({ action: "register", userData: userInfo, formNum: 1 });
-        document.getElementById('loading').style.display='none';
+        document.getElementById('loading').style.display = 'none';
 
         if(!res.success) {
-          document.getElementById('setup').style.display='block';
+          document.getElementById('setup').style.display = 'block';
+          stream.getTracks().forEach(t => t.stop()); // エラー時はマイク停止
           return alert(res.message);
         }
         
         myRow = res.row;
-        document.getElementById('test').style.display='block';
-        document.getElementById('bar-container').style.display='block';
+        document.getElementById('test').style.display = 'block';
+        document.getElementById('bar-container').style.display = 'block';
         setupRecorder();
       } catch (e) {
-        alert("マイクの使用が許可されませんでした。ブラウザの設定を確認してください。");
+        console.error(e);
+        alert("マイクの使用が許可されませんでした。URL横の鍵マーク等からマイクを許可して、ページを再読み込みしてください。");
       }
     }
 
@@ -105,8 +111,8 @@
     function runTimer() {
       chunks = [];
       recorder.start();
-      timeLeft = 150; // 2分30秒
-      document.getElementById('time').style.color = "#d9534f";
+      timeLeft = 150; 
+      document.getElementById('time').innerText = "2:30";
       
       clearInterval(timer);
       timer = setInterval(() => {
@@ -117,13 +123,13 @@
         
         if (timeLeft <= 0) {
           clearInterval(timer);
-          next(true); // 時間切れ時は自動で次へ
+          next(true); // 時間切れ時は自動送信
         }
       }, 1000);
     }
 
     async function next(isAuto = false) {
-      // 停止させていた confirm を削除。代わりにボタンを無効化して連打防止
+      // 連打防止とタイマー停止
       document.getElementById('next-btn').disabled = true;
       clearInterval(timer);
       
@@ -158,7 +164,7 @@
               finish();
             }
           } catch (e) {
-            alert("通信エラーが発生しました。もう一度「次へ」を押してください。");
+            alert("通信エラーが発生しました。ページを閉じずに再度「次へ」ボタンを試してください。");
             document.getElementById('test').style.display = 'block';
             document.getElementById('loading').style.display = 'none';
             document.getElementById('next-btn').disabled = false;
@@ -172,11 +178,16 @@
       document.getElementById('load-text').innerHTML = "AI採点中...<br><span style='font-size:14px'>30秒ほどかかる場合があります</span>";
       
       try {
-        const finalScore = await callGas({ action: "grade", row: myRow, formNum: 1 });
+        const res = await callGas({ action: "grade", row: myRow, formNum: 1 });
         document.getElementById('loading').style.display = 'none';
         
-        // オブジェクトで返ってきた場合にも対応できるよう安全に処理
-        const displayScore = (typeof finalScore === 'object') ? (finalScore.score || "判定中") : finalScore;
+        // 【修正】[object Object]対策：データがどう届いても数字を抽出する
+        let displayScore = 0;
+        if (typeof res === 'object') {
+            displayScore = res.score || res.total || Object.values(res)[0] || 0;
+        } else {
+            displayScore = res;
+        }
         
         let html = `<h1>採点結果: ${displayScore}点</h1>`;
         if (Number(displayScore) >= 30) {
@@ -189,7 +200,7 @@
         document.getElementById('result-screen').style.display = 'block';
       } catch (e) {
         document.getElementById('loading').style.display = 'none';
-        alert("採点中にエラーが発生しました。スプレッドシートを確認してください。");
+        alert("採点処理中にエラーが発生しました。");
       }
     }
   </script>
