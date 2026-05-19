@@ -3,88 +3,182 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>(26)研修フォーム②</title>
+  <title>(26)研修フォーム② - 音声テスト</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f4f7f6; }
-    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    input, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
-    textarea { height: 150px; font-size: 16px; }
-    button { width: 100%; padding: 15px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 18px; cursor: pointer; }
-    .timer { font-size: 30px; color: #d9534f; font-weight: bold; margin: 10px 0; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    h2 { color: #1a73e8; margin-bottom: 20px; }
+    input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+    button { padding: 15px 30px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; font-weight: bold; width: 90%; transition: 0.3s; }
+    button:hover { background: #1557b0; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    .timer { font-size: 48px; font-weight: bold; color: #e53935; margin: 20px 0; font-family: monospace; }
+    #visualizer-box { width: 90%; height: 20px; background: #eee; border-radius: 10px; margin: 0 auto 20px auto; overflow: hidden; }
+    #visualizer { width: 0%; height: 100%; background: #4caf50; transition: width 0.1s; }
+    .loader { display: inline-block; width: 30px; height: 30px; border: 4px solid #f3f3f3; border-top: 4px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite; margin-top: 10px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .status-text { font-size: 18px; font-weight: bold; margin-top: 15px; color: #555; }
   </style>
 </head>
 <body>
-  <div id="auth-section" class="card">
+
+<div class="container">
+  <!-- 認証画面 -->
+  <div id="auth-view">
     <h2>(26)研修フォーム②</h2>
+    <p>基本情報と同じ内容を入力し、マイクを許可してください。</p>
     <input type="text" id="email" placeholder="メールアドレス">
-    <input type="text" id="id" placeholder="ID (数字6桁)">
+    <input type="text" id="id" placeholder="ID（数字6桁）">
     <input type="text" id="name" placeholder="氏名">
-    <button onclick="authenticate()">スタート</button>
+    <button onclick="startAuth()">認証してスタート</button>
+    <div id="auth-status" class="status-text" style="display:none;">
+      <div class="loader"></div><br>認証中・マイク準備中...
+    </div>
   </div>
 
-  <div id="test-section" class="card" style="display:none;">
-    <div id="status">Section 1 / 5</div>
-    <div class="timer" id="time">03:00</div>
-    <textarea id="answer" placeholder="ここに回答を記述してください"></textarea>
-    <button onclick="nextSection()">次へ進む</button>
+  <!-- テスト画面 -->
+  <div id="test-view" style="display:none;">
+    <h3 id="section-title">セクション 1 / 5</h3>
+    <div class="timer" id="time">02:30</div>
+    <div id="visualizer-box"><div id="visualizer"></div></div>
+    <button id="next-btn" onclick="nextSection(false)">回答を終了して次へ</button>
   </div>
 
-  <div id="result-section" class="card" style="display:none;">
-    <h2 id="result-text">採点中...</h2>
+  <!-- ロード画面（保存・採点中） -->
+  <div id="loading-view" style="display:none;">
+    <h2>処理中...</h2>
+    <div class="loader"></div>
+    <p id="loading-text" class="status-text">サーバーに保存しています。<br>画面を閉じないでください。</p>
   </div>
 
-  <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbwn9hNLSPJmXKGz71BRGMgA9GMaPgUePXB4FM2OC8sWRi04PthK1AnbnPka_5dxzOv9CQ/exec";
-    let user = {}, answers = [], cur = 1, timeLeft = 180, timer;
+  <!-- 結果画面 -->
+  <div id="result-view" style="display:none;">
+    <h2 id="result-title">採点完了</h2>
+    <p id="result-message" class="status-text"></p>
+  </div>
+</div>
 
-    async function authenticate() {
-      user = { 
-        email: document.getElementById('email').value.trim(), 
-        id: document.getElementById('id').value.trim(),
-        name: document.getElementById('name').value.trim()
-      };
-      const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "auth", user: user }) });
-      const data = await res.json();
-      if (data.success) {
-        document.getElementById('auth-section').style.display = 'none';
-        document.getElementById('test-section').style.display = 'block';
-        startTimer();
-      } else { alert("認証に失敗しました。メアドとIDを確認してください。"); }
-    }
+<script>
+  // ★★★ 新しいGASのURLに書き換えてください ★★★
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbzaLgBbh0kb9EpsuHXHZ_otxIAlYmC1iiKg2iHN0CPhKuvURgR1FJA2ASJ54GfIcdmyEA/exec"; 
 
-    function startTimer() {
-      timeLeft = 180;
-      timer = setInterval(() => {
-        let m = Math.floor(timeLeft / 60), s = timeLeft % 60;
-        document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
-        if (timeLeft-- <= 0) nextSection();
-      }, 1000);
-    }
+  let user = {}, stream, recorder, chunks = [], cur = 1, timeLeft = 150, timerInterval;
 
-    async function nextSection() {
-      clearInterval(timer);
-      answers.push(document.getElementById('answer').value);
-      document.getElementById('answer').value = "";
+  async function callGas(data) {
+    const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
+    return await res.json();
+  }
+
+  async function startAuth() {
+    user = { 
+      email: document.getElementById('email').value.trim(), 
+      id: document.getElementById('id').value.trim(), 
+      name: document.getElementById('name').value.trim() 
+    };
+    if (!user.email || !user.id || !user.name) return alert("すべての項目を入力してください。");
+
+    document.getElementById('auth-status').style.display = 'block';
+
+    try {
+      // 1. 最優先でマイクの許可を取る
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      if (cur < 5) {
-        cur++;
-        document.getElementById('status').innerText = `Section ${cur} / 5`;
-        startTimer();
+      // 2. GASに認証リクエスト
+      const res = await callGas({ action: "auth", user: user });
+      if (res.success) {
+        document.getElementById('auth-view').style.display = 'none';
+        document.getElementById('test-view').style.display = 'block';
+        startRecording();
       } else {
-        submitTest();
+        alert(res.message);
+        document.getElementById('auth-status').style.display = 'none';
+        stream.getTracks().forEach(t => t.stop()); // マイク解放
       }
+    } catch (e) {
+      alert("マイクへのアクセスが拒否されました。ブラウザの設定を確認してください。");
+      document.getElementById('auth-status').style.display = 'none';
     }
+  }
 
-    async function submitTest() {
-      document.getElementById('test-section').style.display = 'none';
-      document.getElementById('result-section').style.display = 'block';
-      const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "submit", user: user, answers: answers }) });
-      const data = await res.json();
-      
-      let msg = `点数: ${data.score}点\n`;
-      msg += (data.score >= 30) ? "【合格】フォーム④に進んでください。" : "【不合格】フォーム③に進んでください。";
-      document.getElementById('result-text').innerText = msg;
-    }
-  </script>
+  function startRecording() {
+    chunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.start();
+
+    // マイクの音量インジケーター
+    const audioCtx = new AudioContext();
+    const analyser = audioCtx.createAnalyser();
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const updateVisualizer = () => {
+      if (recorder.state === "inactive") return;
+      analyser.getByteFrequencyData(dataArray);
+      let vol = dataArray.reduce((a, b) => a + b) / dataArray.length;
+      document.getElementById('visualizer').style.width = (vol * 2.5) + "%";
+      requestAnimationFrame(updateVisualizer);
+    };
+    updateVisualizer();
+
+    // 2.5分（150秒）タイマー
+    timeLeft = 150;
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      let m = Math.floor(timeLeft / 60);
+      let s = timeLeft % 60;
+      document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
+      if (timeLeft <= 0) nextSection(true);
+      timeLeft--;
+    }, 1000);
+  }
+
+  function nextSection(isAuto) {
+    if (!isAuto && !confirm("このセクションの回答を終了して次に進みますか？")) return;
+    clearInterval(timerInterval);
+    
+    document.getElementById('test-view').style.display = 'none';
+    document.getElementById('loading-view').style.display = 'block';
+    document.getElementById('loading-text').innerHTML = `セクション ${cur} を保存中...<br>画面を閉じないでください`;
+
+    recorder.onstop = async () => {
+      const reader = new FileReader();
+      reader.readAsDataURL(new Blob(chunks, { type: 'audio/webm' }));
+      reader.onloadend = async () => {
+        // Base64に変換した音声をGASに送信
+        await callGas({ action: "saveAudio", user: user, sectionNum: cur, audioBase64: reader.result });
+        
+        if (cur < 5) {
+          cur++;
+          document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
+          document.getElementById('loading-view').style.display = 'none';
+          document.getElementById('test-view').style.display = 'block';
+          startRecording();
+        } else {
+          finishTest();
+        }
+      };
+    };
+    recorder.stop();
+  }
+
+  async function finishTest() {
+    stream.getTracks().forEach(t => t.stop()); // マイクの完全終了
+    document.getElementById('loading-text').innerHTML = "すべての音声の保存が完了しました。<br>AIが採点しています... (約30秒)";
+    
+    const res = await callGas({ action: "grade", user: user });
+    
+    document.getElementById('loading-view').style.display = 'none';
+    document.getElementById('result-view').style.display = 'block';
+    
+    let score = res.score || 0;
+    document.getElementById('result-title').innerText = `最終点数: ${score}点`;
+    
+    let msg = score >= 30 
+      ? "<b>【合格】</b>おめでとうございます。<br>次は「フォーム④」に進んでください。" 
+      : "<b>【不合格】</b>残念ですが基準に達しませんでした。<br>次は「フォーム③」に進んでください。";
+    document.getElementById('result-message').innerHTML = msg;
+  }
+</script>
+
 </body>
 </html>
