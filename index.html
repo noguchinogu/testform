@@ -34,7 +34,7 @@
 
   <script>
     // ★ここにGASのURLを貼り付けてください
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzLchkvcBJS7JHYbkTK2wkFhINWK7a08j2Fesu_1dkyupqNVQZ2BokECljiNE8U8hQT9w/exec"; 
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbxjmdHRQk1wMeHb_H7wX0zzMo1X0eclR4px6IJtSvJFKyVQIKG1_wzIIiYWkSQ9t8x6Tw/exec"; 
 
     let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream;
 
@@ -94,7 +94,7 @@
         reader.onloadend = async () => {
           await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });
           document.getElementById('loading').style.display = 'none';
-          if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; runTimer(); } 
+          if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; document.getElementById('test').style.display='block'; runTimer(); } 
           else { finish(); }
         };
       };
@@ -105,9 +105,14 @@
       document.getElementById('test').style.display = 'none';
       document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2>";
       document.getElementById('loading').style.display = 'block';
-      const score = await callGas({ action: "grade", row: myRow, formNum: 1 });
+      
+      const result = await callGas({ action: "grade", row: myRow, formNum: 1 });
+      
+      // 【ここを修正】データがオブジェクトで届いても数字を抽出できるようにする
+      const score = (result && typeof result === 'object') ? result.total : result;
+      
       let h = `<h2>点数: ${score}点</h2>`;
-      h += (score >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
+      h += (Number(score) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
       document.getElementById('loading').innerHTML = h;
     }
   </script>
