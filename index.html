@@ -48,7 +48,7 @@
   <div id="loading-view" style="display:none;">
     <h2>処理中...</h2>
     <div class="loader"></div>
-    <p id="loading-text" class="status-text">サーバーに保存しています。<br>画面を閉じないでください。</p>
+    <p id="loading-text" class="status-text"></p>
   </div>
 
   <!-- 結果画面 -->
@@ -59,10 +59,11 @@
 </div>
 
 <script>
-  // ★★★ 新しいGASのURLに書き換えてください ★★★
+  // ★今の動いているGASのURLを貼り付けてください
   const GAS_URL = "https://script.google.com/macros/s/AKfycbw7qFaHwyrnai9yyegF8yW8ZaSRG1zFQngG2BY1EvYGczo4eljSw8TG8wcOouuoC2U-/exec"; 
 
   let user = {}, stream, recorder, chunks = [], cur = 1, timeLeft = 150, timerInterval;
+  let uploadPromises = []; // ★バックグラウンド処理の管理箱
 
   async function callGas(data) {
     const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
@@ -80,23 +81,20 @@
     document.getElementById('auth-status').style.display = 'block';
 
     try {
-      // 1. 最優先でマイクの許可を取る
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      // 2. GASに認証リクエスト
       const res = await callGas({ action: "auth", user: user });
+      
       if (res.success) {
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
         startRecording();
       } else {
-        // ★修正ポイント：エラーの詳細を確実に表示する
         alert(res.message || res.error || "通信エラーが発生しました。");
         document.getElementById('auth-status').style.display = 'none';
-        stream.getTracks().forEach(t => t.stop()); // マイク解放
+        stream.getTracks().forEach(t => t.stop());
       }
     } catch (e) {
-      alert("マイクへのアクセスが拒否されました。ブラウザの設定を確認してください。");
+      alert("マイクへのアクセスが拒否されました。");
       document.getElementById('auth-status').style.display = 'none';
     }
   }
@@ -107,7 +105,6 @@
     recorder.ondataavailable = e => chunks.push(e.data);
     recorder.start();
 
-    // マイクの音量インジケーター
     const audioCtx = new AudioContext();
     const analyser = audioCtx.createAnalyser();
     audioCtx.createMediaStreamSource(stream).connect(analyser);
@@ -121,7 +118,6 @@
     };
     updateVisualizer();
 
-    // 2.5分（150秒）タイマー
     timeLeft = 150;
     clearInterval(timerInterval);
     timerInterval = setInterval(() => {
@@ -137,35 +133,49 @@
     if (!isAuto && !confirm("このセクションの回答を終了して次に進みますか？")) return;
     clearInterval(timerInterval);
     
+    // 一瞬だけロード画面を挟む
     document.getElementById('test-view').style.display = 'none';
     document.getElementById('loading-view').style.display = 'block';
-    document.getElementById('loading-text').innerHTML = `セクション ${cur} を保存中...<br>画面を閉じないでください`;
+    document.getElementById('loading-text').innerHTML = `セクション ${cur} を記録中...`;
 
-    recorder.onstop = async () => {
-      const reader = new FileReader();
-      reader.readAsDataURL(new Blob(chunks, { type: 'audio/webm' }));
-      reader.onloadend = async () => {
-        // Base64に変換した音声をGASに送信
-        await callGas({ action: "saveAudio", user: user, sectionNum: cur, audioBase64: reader.result });
-        
-        if (cur < 5) {
-          cur++;
-          document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
-          document.getElementById('loading-view').style.display = 'none';
-          document.getElementById('test-view').style.display = 'block';
-          startRecording();
-        } else {
-          finishTest();
-        }
-      };
+    recorder.onstop = () => {
+      const currentSection = cur; 
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      
+      // ★バックグラウンドで保存と文字起こしを実行（画面は待たない）
+      const uploadPromise = new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          await callGas({ action: "saveAudio", user: user, sectionNum: currentSection, audioBase64: reader.result });
+          resolve(); // 保存完了の合図
+        };
+      });
+      uploadPromises.push(uploadPromise);
+
+      // 保存を待たずに、即座に次のセクションを開始！
+      if (cur < 5) {
+        cur++;
+        document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
+        document.getElementById('loading-view').style.display = 'none';
+        document.getElementById('test-view').style.display = 'block';
+        startRecording();
+      } else {
+        finishTest();
+      }
     };
     recorder.stop();
   }
 
   async function finishTest() {
-    stream.getTracks().forEach(t => t.stop()); // マイクの完全終了
-    document.getElementById('loading-text').innerHTML = "すべての音声の保存が完了しました。<br>AIが採点しています... (約30秒)";
+    stream.getTracks().forEach(t => t.stop()); // マイク終了
+    document.getElementById('loading-view').style.display = 'block';
     
+    // ★ここで初めて、裏で進んでいたすべての保存が終わるのを待つ
+    document.getElementById('loading-text').innerHTML = "すべての音声の保存を確認しています...<br>画面を閉じないでください。";
+    await Promise.all(uploadPromises);
+    
+    document.getElementById('loading-text').innerHTML = "保存完了！AIが最終採点しています... (約30秒)";
     const res = await callGas({ action: "grade", user: user });
     
     document.getElementById('loading-view').style.display = 'none';
