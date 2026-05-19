@@ -33,8 +33,7 @@
   <div id="loading" style="display:none;"><h2>処理中...</h2></div>
 
   <script>
-    // ★ここにGASのURLを貼り付けてください
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbxGDDI6srqoYvTmwiJOYEfbUHEFiHNtbcHoQd6UFYXQi-uFy2bjN6jJN3ErCYq5FPy5gw/exec"; 
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbx-zzvUd6hZoaUDbWf2TEV399jm92LyHh7zvTOpMkz1I-U6qyUWOgCrG1LMh4EA8YNatw/exec"; 
 
     let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream;
 
@@ -52,7 +51,7 @@
         const res = await callGas({ action: "register", userData: userInfo, formNum: 1 });
         if(!res.success) return alert(res.message);
         
-        myRow = res.row;
+        myRow = res.row; // ここでしっかり行番号を保存する
         document.getElementById('setup').style.display='none';
         document.getElementById('test').style.display='block';
         document.getElementById('bar-container').style.display='block';
@@ -92,27 +91,28 @@
         const reader = new FileReader();
         reader.readAsDataURL(new Blob(chunks, {type:'audio/webm'}));
         reader.onloadend = async () => {
+          // myRow を確実に送る
           await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });
           document.getElementById('loading').style.display = 'none';
-          if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; document.getElementById('test').style.display='block'; runTimer(); } 
+          if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; runTimer(); } 
           else { finish(); }
         };
       };
     }
 
     async function finish() {
-      stream.getTracks().forEach(t => t.stop());
+      if(stream) stream.getTracks().forEach(t => t.stop());
       document.getElementById('test').style.display = 'none';
       document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2>";
       document.getElementById('loading').style.display = 'block';
       
-      const res = await callGas({ action: "grade", row: myRow, formNum: 1 });
+      const score = await callGas({ action: "grade", row: myRow, formNum: 1 });
       
-      // 【ここを修正】オブジェクトの中から「total」という数字だけを取り出す
-      const score = (res && typeof res === 'object') ? res.total : res;
-      
-      let h = "<h2>点数: " + score + "点</h2>";
-      h += (Number(score) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
+      // scoreがオブジェクトなら中身を、数字ならそのまま使う
+      const finalScore = (score && typeof score === 'object') ? (score.total || 0) : score;
+
+      let h = `<h2>点数: ${finalScore}点</h2>`;
+      h += (Number(finalScore) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
       document.getElementById('loading').innerHTML = h;
     }
   </script>
