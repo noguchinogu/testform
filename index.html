@@ -1,0 +1,130 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2685.3">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta charset="UTF-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;title&gt;フォーム② (音声回答)&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f9f9f9; text-align: center; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.timer { font-size: 32px; font-weight: bold; color: #e74c3c; margin-bottom: 20px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>button { padding: 15px 30px; background: #1a73e8; color: white; border: none; cursor: pointer; border-radius: 5px; font-size: 18px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#bar-container { width: 100%; height: 10px; background: #eee; border-radius: 5px; margin: 20px 0; display:none; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#bar { width: 0%; height: 100%; background: #ff5252; transition: 0.1s; }</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div id="setup" class="card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;h2&gt;(26)既存添削者フォーム②&lt;/h2&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;input type="text" id="email" placeholder="メールアドレス"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;input type="text" id="id" placeholder="ID下6桁"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;input type="text" id="name" placeholder="氏名"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button onclick="start()"&gt;認証して録音開始&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div id="test" style="display:none;" class="card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="timer" id="time"&gt;02:30&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div id="bar-container"&gt;&lt;div id="bar"&gt;&lt;/div&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;h3 id="sec-title"&gt;セクション1&lt;/h3&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button onclick="next()"&gt;回答を終了して次へ&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div id="loading" style="display:none;"&gt;&lt;h2&gt;処理中...&lt;/h2&gt;&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;script&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const GAS_URL = "ここにあなたのGASのURLを貼り付け";<span class="Apple-converted-space"> </span></p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>async function callGas(data) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const response = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });</p>
+<p class="p1"><span class="Apple-converted-space">      </span>return await response.json();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>async function start() {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>userInfo = { email: document.getElementById('email').value.trim(), id: document.getElementById('id').value.trim(), name: document.getElementById('name').value.trim() };</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if(!userInfo.email || !userInfo.id) return alert("入力してください");</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>try {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>stream = await navigator.mediaDevices.getUserMedia({ audio: true });</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const res = await callGas({ action: "register", userData: userInfo, formNum: 1 });</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if(!res.success) return alert(res.message);</p>
+<p class="p2"><span class="Apple-converted-space">        </span></p>
+<p class="p1"><span class="Apple-converted-space">        </span>myRow = res.row;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>document.getElementById('setup').style.display='none';</p>
+<p class="p1"><span class="Apple-converted-space">        </span>document.getElementById('test').style.display='block';</p>
+<p class="p1"><span class="Apple-converted-space">        </span>document.getElementById('bar-container').style.display='block';</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setupRecorder();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>} catch (e) {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>alert("マイクを許可してください。");</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>function setupRecorder() {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>recorder = new MediaRecorder(stream);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>recorder.ondataavailable = e =&gt; chunks.push(e.data);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const ctx = new AudioContext();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const ana = ctx.createAnalyser();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>ctx.createMediaStreamSource(stream).connect(ana);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const data = new Uint8Array(ana.frequencyBinCount);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const upd = () =&gt; { ana.getByteFrequencyData(data); document.getElementById('bar').style.width = (data.reduce((a,b)=&gt;a+b)/data.length)*2.5+"%"; requestAnimationFrame(upd); };</p>
+<p class="p1"><span class="Apple-converted-space">      </span>upd();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>runTimer();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>function runTimer() {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>chunks = []; recorder.start();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>let left = 150;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>clearInterval(timer);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>timer = setInterval(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>document.getElementById('time').innerText = Math.floor(left/60)+":"+(left%60).toString().padStart(2,'0');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if(left-- &lt;= 0) { clearInterval(timer); next(true); }</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}, 1000);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>async function next(auto=false) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if(!auto &amp;&amp; !confirm("次へ進みますか？")) return;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>document.getElementById('loading').style.display = 'block';</p>
+<p class="p1"><span class="Apple-converted-space">      </span>recorder.stop();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>recorder.onstop = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const reader = new FileReader();</p>
+<p class="p1"><span class="Apple-converted-space">        </span>reader.readAsDataURL(new Blob(chunks, {type:'audio/webm'}));</p>
+<p class="p1"><span class="Apple-converted-space">        </span>reader.onloadend = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">          </span>await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });</p>
+<p class="p1"><span class="Apple-converted-space">          </span>document.getElementById('loading').style.display = 'none';</p>
+<p class="p1"><span class="Apple-converted-space">          </span>if(cur &lt; 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; runTimer(); }<span class="Apple-converted-space"> </span></p>
+<p class="p1"><span class="Apple-converted-space">          </span>else { finish(); }</p>
+<p class="p1"><span class="Apple-converted-space">        </span>};</p>
+<p class="p1"><span class="Apple-converted-space">      </span>};</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>async function finish() {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>stream.getTracks().forEach(t =&gt; t.stop());</p>
+<p class="p1"><span class="Apple-converted-space">      </span>document.getElementById('test').style.display = 'none';</p>
+<p class="p1"><span class="Apple-converted-space">      </span>document.getElementById('loading').innerHTML = "&lt;h2&gt;AI採点中...&lt;/h2&gt;";</p>
+<p class="p1"><span class="Apple-converted-space">      </span>document.getElementById('loading').style.display = 'block';</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const score = await callGas({ action: "grade", row: myRow, formNum: 1 });</p>
+<p class="p1"><span class="Apple-converted-space">      </span>let h = `&lt;h2&gt;点数: ${score}点&lt;/h2&gt;`;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>h += (score &gt;= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";</p>
+<p class="p1"><span class="Apple-converted-space">      </span>document.getElementById('loading').innerHTML = h;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>
