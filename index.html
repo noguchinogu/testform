@@ -1,48 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>Speaking Test Timer</title>
-    <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; background: #222; color: #fff; padding-top: 50px; }
-        .timer { font-size: 80px; font-weight: bold; color: #ff5252; margin: 30px 0; }
-        .status { font-size: 24px; color: #aaa; margin-bottom: 10px; }
-        #img-container { margin-top: 20px; }
-        img { max-width: 90%; max-height: 60vh; border: 8px solid #444; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>(26)研修フォーム②</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f4f7f6; }
+    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    input, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+    textarea { height: 150px; font-size: 16px; }
+    button { width: 100%; padding: 15px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 18px; cursor: pointer; }
+    .timer { font-size: 30px; color: #d9534f; font-weight: bold; margin: 10px 0; }
+  </style>
 </head>
 <body>
-    <div class="status" id="status">Section 1 / 5</div>
-    <div class="timer" id="time">02:30</div>
-    <div id="img-container">
-        <img id="q-img" src="https://drive.google.com/file/d/1_zXXFR7X7L4ZeG9W-vVcHZu-39zbwMP5/view?usp=sharing">
-    </div>
+  <div id="auth-section" class="card">
+    <h2>(26)研修フォーム②</h2>
+    <input type="text" id="email" placeholder="メールアドレス">
+    <input type="text" id="id" placeholder="ID (数字6桁)">
+    <input type="text" id="name" placeholder="氏名">
+    <button onclick="authenticate()">スタート</button>
+  </div>
 
-    <script>
-        const images = [
-            "https://drive.google.com/file/d/1_zXXFR7X7L4ZeG9W-vVcHZu-39zbwMP5/view?usp=sharing", "https://drive.google.com/file/d/1_zXXFR7X7L4ZeG9W-vVcHZu-39zbwMP5/view?usp=sharing", "https://drive.google.com/file/d/1_zXXFR7X7L4ZeG9W-vVcHZu-39zbwMP5/view?usp=sharing", "https://drive.google.com/file/d/1_zXXFR7X7L4ZeG9W-vVcHZu-39zbwMP5/view?usp=sharing", "https://drive.google.com/file/d/1_zXXFR7X7L4ZeG9W-vVcHZu-39zbwMP5/view?usp=sharing"
-        ];
-        let current = 0;
-        let timeLeft = 150; // 2.5分 = 150秒
+  <div id="test-section" class="card" style="display:none;">
+    <div id="status">Section 1 / 5</div>
+    <div class="timer" id="time">03:00</div>
+    <textarea id="answer" placeholder="ここに回答を記述してください"></textarea>
+    <button onclick="nextSection()">次へ進む</button>
+  </div>
 
-        function update() {
-            let m = Math.floor(timeLeft / 60);
-            let s = timeLeft % 60;
-            document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
-            
-            if (timeLeft <= 0) {
-                current++;
-                if (current < 5) {
-                    timeLeft = 150;
-                    document.getElementById('q-img').src = images[current];
-                    document.getElementById('status').innerText = `Section ${current + 1} / 5`;
-                } else {
-                    document.body.innerHTML = "<h1>Test Complete. <br>Please stop recording and leave the meeting.</h1>";
-                }
-            }
-            timeLeft--;
-        }
-        setInterval(update, 1000);
-    </script>
+  <div id="result-section" class="card" style="display:none;">
+    <h2 id="result-text">採点中...</h2>
+  </div>
+
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwn9hNLSPJmXKGz71BRGMgA9GMaPgUePXB4FM2OC8sWRi04PthK1AnbnPka_5dxzOv9CQ/exec";
+    let user = {}, answers = [], cur = 1, timeLeft = 180, timer;
+
+    async function authenticate() {
+      user = { 
+        email: document.getElementById('email').value.trim(), 
+        id: document.getElementById('id').value.trim(),
+        name: document.getElementById('name').value.trim()
+      };
+      const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "auth", user: user }) });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('test-section').style.display = 'block';
+        startTimer();
+      } else { alert("認証に失敗しました。メアドとIDを確認してください。"); }
+    }
+
+    function startTimer() {
+      timeLeft = 180;
+      timer = setInterval(() => {
+        let m = Math.floor(timeLeft / 60), s = timeLeft % 60;
+        document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
+        if (timeLeft-- <= 0) nextSection();
+      }, 1000);
+    }
+
+    async function nextSection() {
+      clearInterval(timer);
+      answers.push(document.getElementById('answer').value);
+      document.getElementById('answer').value = "";
+      
+      if (cur < 5) {
+        cur++;
+        document.getElementById('status').innerText = `Section ${cur} / 5`;
+        startTimer();
+      } else {
+        submitTest();
+      }
+    }
+
+    async function submitTest() {
+      document.getElementById('test-section').style.display = 'none';
+      document.getElementById('result-section').style.display = 'block';
+      const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "submit", user: user, answers: answers }) });
+      const data = await res.json();
+      
+      let msg = `点数: ${data.score}点\n`;
+      msg += (data.score >= 30) ? "【合格】フォーム④に進んでください。" : "【不合格】フォーム③に進んでください。";
+      document.getElementById('result-text').innerText = msg;
+    }
+  </script>
 </body>
 </html>
