@@ -9,6 +9,7 @@
     .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .timer { font-size: 32px; font-weight: bold; color: #e74c3c; margin-bottom: 20px; }
     button { padding: 15px 30px; background: #1a73e8; color: white; border: none; cursor: pointer; border-radius: 5px; font-size: 18px; }
+    input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     #bar-container { width: 100%; height: 10px; background: #eee; border-radius: 5px; margin: 20px 0; display:none; }
     #bar { width: 0%; height: 100%; background: #ff5252; transition: 0.1s; }
   </style>
@@ -26,15 +27,15 @@
     <div class="timer" id="time">02:30</div>
     <div id="bar-container"><div id="bar"></div></div>
     <h3 id="sec-title">セクション1</h3>
-    <button id="next-btn" onclick="next()">回答を終了して次へ</button>
+    <button onclick="next()">回答を終了して次へ</button>
   </div>
 
-  <div id="loading" style="display:none;"><h2>保存・処理中...</h2><p>画面を閉じずにお待ちください</p></div>
+  <div id="loading" style="display:none;"><h2>保存中...</h2><p>そのままお待ちください</p></div>
 
   <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbw6UGcQy_DXb5oPh1eFqaImJmVAFVLHJhzBtn6jmZgoXisMPGIYuE47IdPm8EQKrf8_ZQ/exec"; 
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbytZpi2hwN1_41rm3aAqdbVxxNbzjIo4jr1QbCw8eePXrsOtARIWJ73kSzQhDUsfCciEA/exec"; 
 
-    let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream;
+    let cur = 1, timer, userInfo, recorder, chunks = [], stream;
 
     async function callGas(data) {
       const response = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
@@ -42,18 +43,21 @@
     }
 
     async function start() {
-      userInfo = { email: document.getElementById('email').value.trim(), id: document.getElementById('id').value.trim(), name: document.getElementById('name').value.trim() };
+      userInfo = { 
+        email: document.getElementById('email').value.trim(), 
+        id: document.getElementById('id').value.trim(), 
+        name: document.getElementById('name').value.trim() 
+      };
       if(!userInfo.email || !userInfo.id) return alert("入力してください");
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const res = await callGas({ action: "register", userData: userInfo, formNum: 1 });
         if(res.success) {
-          myRow = res.row;
           document.getElementById('setup').style.display='none';
           document.getElementById('test').style.display='block';
           document.getElementById('bar-container').style.display='block';
           setupRecorder();
-        }
+        } else { alert(res.message); }
       } catch (e) { alert("マイクを許可してください。"); }
     }
 
@@ -64,7 +68,11 @@
       const ana = ctx.createAnalyser();
       ctx.createMediaStreamSource(stream).connect(ana);
       const data = new Uint8Array(ana.frequencyBinCount);
-      const upd = () => { ana.getByteFrequencyData(data); document.getElementById('bar').style.width = (data.reduce((a,b)=>a+b)/data.length)*2.5+"%"; requestAnimationFrame(upd); };
+      const upd = () => { 
+        ana.getByteFrequencyData(data); 
+        document.getElementById('bar').style.width = (data.reduce((a,b)=>a+b)/data.length)*2.5+"%"; 
+        requestAnimationFrame(upd); 
+      };
       upd();
       runTimer();
     }
@@ -89,8 +97,13 @@
         const reader = new FileReader();
         reader.readAsDataURL(new Blob(chunks, {type:'audio/webm'}));
         reader.onloadend = async () => {
-          // 保存が完了するまで「await」でしっかり待つ
-          const res = await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });
+          await callGas({ 
+            action: "saveAudio", 
+            sectionNum: cur, 
+            audioBase64: reader.result, 
+            userInfo: userInfo, 
+            formNum: 1 
+          });
           
           if(cur < 5) { 
             cur++; 
@@ -107,10 +120,9 @@
 
     async function finish() {
       if (stream) stream.getTracks().forEach(t => t.stop());
-      document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2><p>30秒ほどかかります</p>";
-      const score = await callGas({ action: "grade", row: myRow, formNum: 1 });
-      const finalScore = (typeof score === 'object') ? (score.total || 0) : score;
-      document.getElementById('loading').innerHTML = `<h2>点数: ${finalScore}点</h2>` + ((finalScore >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ");
+      document.getElementById('loading').innerHTML = "<h2>採点中...</h2>";
+      const score = await callGas({ action: "grade", userInfo: userInfo, formNum: 1 });
+      document.getElementById('loading').innerHTML = `<h2>点数: ${score}点</h2>` + ((score >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ");
     }
   </script>
 </body>
