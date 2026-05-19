@@ -30,37 +30,42 @@
     <button onclick="next()">回答を終了して次へ</button>
   </div>
 
-  <div id="loading" style="display:none;"><h2>処理中...</h2><p id="load-msg"></p></div>
+  <div id="loading" style="display:none;"><h2>処理中...</h2></div>
 
   <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzuip854cwbBBlIbwP3EDDNRpx73Zhb_knMQZAi0DutaQ_0c3ydNMz9PbPRlPQl_aEuDQ/exec"; 
+    // ★新しいGASのURLに貼り替えてください
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwKc-hR9QwvDYLP6VtL3dZE_lrJNmJNUQ07qSzp6so8G6XujSlHyckbAiNlzNM8XT1-Nw/exec"; 
 
     let cur = 1, timer, myRow, userInfo, recorder, chunks = [], stream;
 
     async function callGas(data) {
       const response = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
-      const res = await response.json();
-      if (res.success === false) {
-        alert("GASエラー: " + (res.error || res.message));
-        return res;
-      }
-      return res;
+      return await response.json();
     }
 
     async function start() {
       userInfo = { email: document.getElementById('email').value.trim(), id: document.getElementById('id').value.trim(), name: document.getElementById('name').value.trim() };
       if(!userInfo.email || !userInfo.id) return alert("入力してください");
+
       try {
+        // 【重要】何よりも先にマイクの許可をブラウザに求める
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // マイクが取れたらGASと通信を開始する
         const res = await callGas({ action: "register", userData: userInfo, formNum: 1 });
-        if(res.success) {
-          myRow = res.row;
-          document.getElementById('setup').style.display='none';
-          document.getElementById('test').style.display='block';
-          document.getElementById('bar-container').style.display='block';
-          setupRecorder();
+        if(!res.success) {
+          stream.getTracks().forEach(t => t.stop()); // エラー時は一旦止める
+          return alert(res.message);
         }
-      } catch (e) { alert("マイクを許可してください。"); }
+        
+        myRow = res.row;
+        document.getElementById('setup').style.display='none';
+        document.getElementById('test').style.display='block';
+        document.getElementById('bar-container').style.display='block';
+        setupRecorder();
+      } catch (e) {
+        alert("マイクを許可してください。ブラウザの設定から許可を出して再読み込みをお願いします。");
+      }
     }
 
     function setupRecorder() {
@@ -70,7 +75,11 @@
       const ana = ctx.createAnalyser();
       ctx.createMediaStreamSource(stream).connect(ana);
       const data = new Uint8Array(ana.frequencyBinCount);
-      const upd = () => { ana.getByteFrequencyData(data); document.getElementById('bar').style.width = (data.reduce((a,b)=>a+b)/data.length)*2.5+"%"; requestAnimationFrame(upd); };
+      const upd = () => { 
+        ana.getByteFrequencyData(data); 
+        document.getElementById('bar').style.width = (data.reduce((a,b)=>a+b)/data.length)*2.5+"%"; 
+        requestAnimationFrame(upd); 
+      };
       upd();
       runTimer();
     }
@@ -87,8 +96,9 @@
 
     async function next(auto=false) {
       if(!auto && !confirm("次へ進みますか？")) return;
+      document.getElementById('test').style.display = 'none';
       document.getElementById('loading').style.display = 'block';
-      document.getElementById('load-msg').innerText = "音声を保存中...";
+      
       recorder.stop();
       recorder.onstop = async () => {
         const reader = new FileReader();
@@ -96,9 +106,14 @@
         reader.onloadend = async () => {
           const res = await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });
           document.getElementById('loading').style.display = 'none';
-          if(res.success) {
-            if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; runTimer(); } 
-            else { finish(); }
+          
+          if(cur < 5) { 
+            cur++; 
+            document.getElementById('sec-title').innerText = "セクション" + cur; 
+            document.getElementById('test').style.display = 'block';
+            runTimer(); 
+          } else { 
+            finish(); 
           }
         };
       };
@@ -109,13 +124,13 @@
       document.getElementById('test').style.display = 'none';
       document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2>";
       document.getElementById('loading').style.display = 'block';
-      const res = await callGas({ action: "grade", row: myRow, formNum: 1 });
-      if(res.success) {
-        const score = res.score;
-        let h = `<h2>点数: ${score}点</h2>`;
-        h += (Number(score) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
-        document.getElementById('loading').innerHTML = h;
-      }
+      
+      const score = await callGas({ action: "grade", row: myRow, formNum: 1 });
+      const displayScore = (score && typeof score === 'object') ? (score.total || score.score || 0) : score;
+
+      let h = `<h2>点数: ${displayScore}点</h2>`;
+      h += (Number(displayScore) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
+      document.getElementById('loading').innerHTML = h;
     }
   </script>
 </body>
