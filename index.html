@@ -9,7 +9,6 @@
     .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .timer { font-size: 32px; font-weight: bold; color: #e74c3c; margin-bottom: 20px; }
     button { padding: 15px 30px; background: #1a73e8; color: white; border: none; cursor: pointer; border-radius: 5px; font-size: 18px; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
     input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     #bar-container { width: 100%; height: 10px; background: #eee; border-radius: 5px; margin: 20px 0; display:none; }
     #bar { width: 0%; height: 100%; background: #ff5252; transition: 0.1s; }
@@ -28,7 +27,7 @@
     <div class="timer" id="time">02:30</div>
     <div id="bar-container"><div id="bar"></div></div>
     <h3 id="sec-title">セクション1</h3>
-    <button id="next-btn" onclick="next()">回答を終了して次へ</button>
+    <button onclick="next()">回答を終了して次へ</button>
   </div>
 
   <div id="loading" style="display:none;"><h2>処理中...</h2></div>
@@ -86,13 +85,8 @@
     }
 
     async function next(auto=false) {
-      // 【修正1】タイマー停止を防ぐためconfirmを削除。連打防止のためにボタンを無効化
-      document.getElementById('next-btn').disabled = true;
-      clearInterval(timer);
-
+      if(!auto && !confirm("次へ進みますか？")) return;
       document.getElementById('loading').style.display = 'block';
-      document.getElementById('test').style.display = 'none';
-
       recorder.stop();
       recorder.onstop = async () => {
         const reader = new FileReader();
@@ -100,16 +94,8 @@
         reader.onloadend = async () => {
           await callGas({ action: "saveAudio", row: myRow, sectionNum: cur, audioBase64: reader.result, userInfo: userInfo, formNum: 1 });
           document.getElementById('loading').style.display = 'none';
-          if(cur < 5) { 
-            cur++; 
-            document.getElementById('sec-title').innerText = "セクション" + cur; 
-            document.getElementById('test').style.display = 'block';
-            document.getElementById('next-btn').disabled = false; // ボタンを戻す
-            runTimer(); 
-          } 
-          else { 
-            finish(); 
-          }
+          if(cur < 5) { cur++; document.getElementById('sec-title').innerText = "セクション" + cur; runTimer(); } 
+          else { finish(); }
         };
       };
     }
@@ -120,18 +106,21 @@
       document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2>";
       document.getElementById('loading').style.display = 'block';
       
-      const scoreData = await callGas({ action: "grade", row: myRow, formNum: 1 });
+      const score = await callGas({ action: "grade", row: myRow, formNum: 1 });
       
-      // 【修正2】[object Object]対策：返ってきたデータがオブジェクトでも数字でも対応
-      let finalScore = 0;
-      if (typeof scoreData === 'object') {
-        finalScore = scoreData.score || scoreData.total || Object.values(scoreData)[0] || 0;
+      // --- 点数の表示不備 [object Object] を修正する処理 ---
+      let displayScore = 0;
+      if (score && typeof score === 'object') {
+        // もしデータのかたまりで届いたら、その中の数字を探す
+        displayScore = score.score || score.total || Object.values(score)[0] || 0;
       } else {
-        finalScore = scoreData;
+        // 数字のまま届いたらそのまま使う
+        displayScore = score;
       }
+      // --------------------------------------------------
 
-      let h = `<h2>点数: ${finalScore}点</h2>`;
-      h += (Number(finalScore) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
+      let h = `<h2>点数: ${displayScore}点</h2>`;
+      h += (Number(displayScore) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
       document.getElementById('loading').innerHTML = h;
     }
   </script>
