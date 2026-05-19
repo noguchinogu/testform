@@ -105,22 +105,9 @@
       document.getElementById('test').style.display = 'none';
       document.getElementById('loading').innerHTML = "<h2>AI採点中...</h2>";
       document.getElementById('loading').style.display = 'block';
-      
       const score = await callGas({ action: "grade", row: myRow, formNum: 1 });
-      
-      // --- 点数の表示不備 [object Object] を修正する処理 ---
-      let displayScore = 0;
-      if (score && typeof score === 'object') {
-        // もしデータのかたまりで届いたら、その中の数字を探す
-        displayScore = score.score || score.total || Object.values(score)[0] || 0;
-      } else {
-        // 数字のまま届いたらそのまま使う
-        displayScore = score;
-      }
-      // --------------------------------------------------
-
-      let h = `<h2>点数: ${displayScore}点</h2>`;
-      h += (Number(displayScore) >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
+      let h = `<h2>点数: ${score}点</h2>`;
+      h += (score >= 30) ? "合格です！次はフォーム④へ" : "不合格。次はフォーム③へ";
       document.getElementById('loading').innerHTML = h;
     }
   </script>
