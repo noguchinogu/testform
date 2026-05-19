@@ -19,7 +19,7 @@
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .status-text { font-size: 18px; font-weight: bold; margin-top: 15px; color: #555; }
 
-    /* ★追加：カスタム確認ポップアップのデザイン */
+    /* 自作確認ポップアップのデザイン */
     #custom-confirm { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
     .confirm-box { background: white; padding: 30px; border-radius: 10px; width: 80%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     .confirm-box p { font-size: 18px; font-weight: bold; margin-bottom: 25px; }
@@ -32,7 +32,6 @@
 </head>
 <body>
 
-<!-- ★追加：自作の確認ポップアップ画面 -->
 <div id="custom-confirm">
   <div class="confirm-box">
     <p>このセクションの回答を終了して次に進みますか？<br><span style="font-size:14px; color:#666; font-weight:normal;">(時間は進み続けます)</span></p>
@@ -44,7 +43,6 @@
 </div>
 
 <div class="container">
-  <!-- 認証画面 -->
   <div id="auth-view">
     <h2>(26)研修フォーム②</h2>
     <p>基本情報と同じ内容を入力し、マイクを許可してください。</p>
@@ -57,7 +55,6 @@
     </div>
   </div>
 
-  <!-- テスト画面 -->
   <div id="test-view" style="display:none;">
     <h3 id="section-title">セクション 1 / 5</h3>
     <div class="timer" id="time">02:30</div>
@@ -65,14 +62,12 @@
     <button id="next-btn" onclick="nextSection(false)">回答を終了して次へ</button>
   </div>
 
-  <!-- ロード画面 -->
   <div id="loading-view" style="display:none;">
     <h2>処理中...</h2>
     <div class="loader"></div>
     <p id="loading-text" class="status-text"></p>
   </div>
 
-  <!-- 結果画面 -->
   <div id="result-view" style="display:none;">
     <h2 id="result-title">採点完了</h2>
     <p id="result-message" class="status-text"></p>
@@ -85,6 +80,18 @@
 
   let user = {}, stream, recorder, chunks = [], cur = 1, timeLeft = 150, timerInterval;
   let uploadPromises = []; 
+  
+  // ★追加：テスト中かどうかを判定するフラグ
+  let isTesting = false; 
+
+  // ★追加：ブラウザを閉じようとしたり、戻るボタンを押した時の警告
+  window.addEventListener('beforeunload', function (e) {
+    if (isTesting) {
+      // 警告を出すためのブラウザ標準の命令です
+      e.preventDefault();
+      e.returnValue = ''; 
+    }
+  });
 
   async function callGas(data) {
     const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
@@ -106,6 +113,7 @@
       const res = await callGas({ action: "auth", user: user });
       
       if (res.success) {
+        isTesting = true; // ★追加：ここからテスト開始（警告がオンになります）
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
         startRecording();
@@ -146,29 +154,25 @@
       let s = timeLeft % 60;
       document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
       
-      // 時間切れ時の処理
       if (timeLeft <= 0) {
-        executeNext(); // 強制的に次へ
+        executeNext(); 
       }
       timeLeft--;
     }, 1000);
   }
 
-  // ★変更：ボタンを押した時は、ブラウザのconfirmではなく自作ポップアップを出す
   function nextSection(isAuto) {
     if (!isAuto) {
       document.getElementById('custom-confirm').style.display = 'flex';
     }
   }
 
-  // ★追加：ポップアップで「いいえ」を押した時
   function closeConfirm() {
     document.getElementById('custom-confirm').style.display = 'none';
   }
 
-  // ★分離：実際に次のセクションへ進む処理
   function executeNext() {
-    document.getElementById('custom-confirm').style.display = 'none'; // ポップアップが出ていれば消す
+    document.getElementById('custom-confirm').style.display = 'none'; 
     clearInterval(timerInterval);
     
     document.getElementById('test-view').style.display = 'none';
@@ -211,6 +215,8 @@
     
     document.getElementById('loading-text').innerHTML = "保存完了！AIが最終採点しています... (約30秒)";
     const res = await callGas({ action: "grade", user: user });
+    
+    isTesting = false; // ★追加：すべて完了したので、ページを閉じても警告が出ないようにする
     
     document.getElementById('loading-view').style.display = 'none';
     document.getElementById('result-view').style.display = 'block';
