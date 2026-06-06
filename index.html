@@ -19,7 +19,6 @@
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .status-text { font-size: 18px; font-weight: bold; margin-top: 15px; color: #555; }
 
-    /* 自作確認ポップアップのデザイン */
     #custom-confirm { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
     .confirm-box { background: white; padding: 30px; border-radius: 10px; width: 80%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     .confirm-box p { font-size: 18px; font-weight: bold; margin-bottom: 25px; }
@@ -76,13 +75,12 @@
 
 <script>
   // ★今の動いている新しいGASのURLを貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbwIOPfQIqrcuUnRqO0zqXSEfwXc_Seyz2LRM5viWAohOWgu7ouAHrpsyEAZc0xt4-AsQA/exec"; 
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbwGsPFBkAs44DrdiQpsSc5tMKIMkhqmzg321Qqr2Z2n8-ZoMhup1LXuW97RctZUjlaUpw/exec"; 
 
   let user = {}, stream, recorder, chunks = [], cur = 1, timerInterval;
   let uploadPromises = []; 
   let isTesting = false; 
 
-  // ★追加：別のタブやアプリに移動した時の検知処理
   function handleFocusLost() {
     if (isTesting && document.getElementById('test-view').style.display === 'block') {
       alert("【警告】別の画面やアプリへの移動が検知されました。\n不正防止のため、現在のセクションを強制終了して次に進みます。");
@@ -90,12 +88,10 @@
     }
   }
 
-  // タブが切り替わった時
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) handleFocusLost();
   });
 
-  // 別のアプリや画面外（URLバーなど）をクリックした時
   window.addEventListener("blur", () => {
     handleFocusLost();
   });
@@ -161,9 +157,8 @@
     };
     updateVisualizer();
 
-    // ★修正：現在時刻をもとに残り時間を計算する（裏に回ってもズレないように）
     const endTime = Date.now() + 150 * 1000; 
-    document.getElementById('time').innerText = "02:30"; // 初回表示
+    document.getElementById('time').innerText = "02:30"; 
     clearInterval(timerInterval);
 
     timerInterval = setInterval(() => {
@@ -189,7 +184,6 @@
   }
 
   function executeNext() {
-    // ★追加：フォーカス外れと時間切れが同時に起きた時などの「二重実行」を防止
     if (document.getElementById('test-view').style.display === 'none') return;
 
     document.getElementById('custom-confirm').style.display = 'none'; 
@@ -207,8 +201,9 @@
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
-          await callGas({ action: "saveAudio", user: user, sectionNum: currentSection, audioBase64: reader.result });
-          resolve(); 
+          // ★修正：GASから保存された音声の「ファイルID」を受け取ってリストに保管する
+          const res = await callGas({ action: "saveAudio", user: user, sectionNum: currentSection, audioBase64: reader.result });
+          resolve(res.fileId); 
         };
       });
       uploadPromises.push(uploadPromise);
@@ -224,7 +219,6 @@
       }
     };
     
-    // recorderが動いている時だけストップをかける
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();
     }
@@ -235,12 +229,14 @@
     document.getElementById('loading-view').style.display = 'block';
     
     document.getElementById('loading-text').innerHTML = "すべての音声の保存を確認しています...<br>画面を閉じないでください。";
-    await Promise.all(uploadPromises);
+    
+    // ★修正：5つすべての音声がドライブに保存され、それぞれの「ファイルID」を取得するのを待つ
+    const fileIds = await Promise.all(uploadPromises);
     
     document.getElementById('loading-text').innerHTML = "保存完了！AIが最終採点しています... (約30秒)";
-    const res = await callGas({ action: "submit", user: user, answers: uploadPromises }); // ★ここは本来音声ではなくテキスト等を送る部分ですが、一旦前のロジック通りに
-    // ※ 補足：音声データの結合とAI採点のフローは GAS の処理と連動しています。
-    // ※ 現在のGASは action: "submit" の時に p.answers を期待しています。
+    
+    // ★修正：取得した5つのファイルIDをまとめた配列(fileIds)をGASに送って採点させる
+    const res = await callGas({ action: "submit", user: user, answers: fileIds }); 
     
     isTesting = false; 
     
