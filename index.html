@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>(26)研修フォーム② - 音声テスト</title>
+  <title>(26)研修フォーム② - 記述テスト</title>
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; color: #333; }
     .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; }
     h2 { color: #1a73e8; margin-bottom: 20px; }
     input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+    textarea { width: 90%; height: 150px; padding: 12px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; resize: vertical; }
+    .char-count { font-size: 14px; color: #666; margin-bottom: 15px; text-align: right; width: 90%; margin-left: auto; margin-right: auto; }
     button { padding: 15px 30px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; font-weight: bold; width: 90%; transition: 0.3s; }
     button:hover { background: #1557b0; }
     button:disabled { background: #aaa; cursor: not-allowed; }
     .timer { font-size: 48px; font-weight: bold; color: #e53935; margin: 20px 0; font-family: monospace; }
-    #visualizer-box { width: 90%; height: 20px; background: #eee; border-radius: 10px; margin: 0 auto 20px auto; overflow: hidden; }
-    #visualizer { width: 0%; height: 100%; background: #4caf50; transition: width 0.1s; }
     .loader { display: inline-block; width: 30px; height: 30px; border: 4px solid #f3f3f3; border-top: 4px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite; margin-top: 10px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .status-text { font-size: 18px; font-weight: bold; margin-top: 15px; color: #555; }
@@ -44,20 +44,21 @@
 <div class="container">
   <div id="auth-view">
     <h2>(26)研修フォーム②</h2>
-    <p>基本情報と同じ内容を入力し、マイクを許可してください。</p>
+    <p>基本情報と同じ内容を入力してください。</p>
     <input type="text" id="email" placeholder="メールアドレス">
     <input type="text" id="id" placeholder="ID（数字6桁）">
     <input type="text" id="name" placeholder="氏名">
     <button onclick="startAuth()">認証してスタート</button>
     <div id="auth-status" class="status-text" style="display:none;">
-      <div class="loader"></div><br>認証中・マイク準備中...
+      <div class="loader"></div><br>認証中...
     </div>
   </div>
 
   <div id="test-view" style="display:none;">
     <h3 id="section-title">セクション 1 / 5</h3>
     <div class="timer" id="time">02:30</div>
-    <div id="visualizer-box"><div id="visualizer"></div></div>
+    <textarea id="answer-text" placeholder="ここに回答を入力してください（500字以内）" maxlength="500" oninput="updateCharCount()"></textarea>
+    <div class="char-count"><span id="char-current">0</span> / 500</div>
     <button id="next-btn" onclick="nextSection(false)">回答を終了して次へ</button>
   </div>
 
@@ -75,10 +76,10 @@
 
 <script>
   // ★今の動いている新しいGASのURLを貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbyApJQSTL5Ye-V5DLcuYIg4eXoO_g324UraTJn55OiTD8IOGWHXWxbpbyWS-9R3bqzTuQ/exec"; 
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbzGk2BPpx33si7eU9W_z-WDvbE2CkMZdsoaeJBvQJs3ZW9TIikxCD8Ksah4_1zlQfUDLQ/exec"; 
 
-  let user = {}, stream, recorder, chunks = [], cur = 1, timerInterval;
-  let uploadPromises = []; 
+  let user = {}, cur = 1, timerInterval;
+  let answers = []; 
   let isTesting = false; 
 
   function handleFocusLost() {
@@ -103,6 +104,12 @@
     }
   });
 
+  // 文字数をカウントする関数
+  function updateCharCount() {
+    const textLength = document.getElementById('answer-text').value.length;
+    document.getElementById('char-current').innerText = textLength;
+  }
+
   async function callGas(data) {
     const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
     return await res.json();
@@ -119,43 +126,27 @@
     document.getElementById('auth-status').style.display = 'block';
 
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const res = await callGas({ action: "auth", user: user });
       
       if (res.success) {
         isTesting = true; 
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
-        startRecording();
+        startSection();
       } else {
         alert(res.message || res.error || "通信エラーが発生しました。");
         document.getElementById('auth-status').style.display = 'none';
-        stream.getTracks().forEach(t => t.stop());
       }
     } catch (e) {
-      alert("マイクへのアクセスが拒否されました。");
+      alert("通信エラーが発生しました。");
       document.getElementById('auth-status').style.display = 'none';
     }
   }
 
-  function startRecording() {
-    chunks = [];
-    recorder = new MediaRecorder(stream);
-    recorder.ondataavailable = e => chunks.push(e.data);
-    recorder.start();
-
-    const audioCtx = new AudioContext();
-    const analyser = audioCtx.createAnalyser();
-    audioCtx.createMediaStreamSource(stream).connect(analyser);
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    const updateVisualizer = () => {
-      if (recorder.state === "inactive") return;
-      analyser.getByteFrequencyData(dataArray);
-      let vol = dataArray.reduce((a, b) => a + b) / dataArray.length;
-      document.getElementById('visualizer').style.width = (vol * 2.5) + "%";
-      requestAnimationFrame(updateVisualizer);
-    };
-    updateVisualizer();
+  function startSection() {
+    // テキストエリアを空にして文字数をリセット
+    document.getElementById('answer-text').value = '';
+    updateCharCount();
 
     const endTime = Date.now() + 150 * 1000; 
     document.getElementById('time').innerText = "02:30"; 
@@ -189,54 +180,26 @@
     document.getElementById('custom-confirm').style.display = 'none'; 
     clearInterval(timerInterval);
     
-    document.getElementById('test-view').style.display = 'none';
-    document.getElementById('loading-view').style.display = 'block';
-    document.getElementById('loading-text').innerHTML = `セクション ${cur} を記録中...`;
+    // 入力されているテキストを配列に保存
+    const currentText = document.getElementById('answer-text').value;
+    answers.push(currentText);
 
-    recorder.onstop = () => {
-      const currentSection = cur; 
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      
-      const uploadPromise = new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = async () => {
-          // ★修正：GASから保存された音声の「ファイルID」を受け取ってリストに保管する
-          const res = await callGas({ action: "saveAudio", user: user, sectionNum: currentSection, audioBase64: reader.result });
-          resolve(res.fileId); 
-        };
-      });
-      uploadPromises.push(uploadPromise);
-
-      if (cur < 5) {
-        cur++;
-        document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
-        document.getElementById('loading-view').style.display = 'none';
-        document.getElementById('test-view').style.display = 'block';
-        startRecording();
-      } else {
-        finishTest();
-      }
-    };
-    
-    if (recorder && recorder.state !== "inactive") {
-      recorder.stop();
+    if (cur < 5) {
+      cur++;
+      document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
+      startSection();
+    } else {
+      finishTest();
     }
   }
 
   async function finishTest() {
-    stream.getTracks().forEach(t => t.stop()); 
+    document.getElementById('test-view').style.display = 'none';
     document.getElementById('loading-view').style.display = 'block';
+    document.getElementById('loading-text').innerHTML = "回答を送信中... AIが最終採点しています (約10秒)<br>画面を閉じないでください。";
     
-    document.getElementById('loading-text').innerHTML = "すべての音声の保存を確認しています...<br>画面を閉じないでください。";
-    
-    // ★修正：5つすべての音声がドライブに保存され、それぞれの「ファイルID」を取得するのを待つ
-    const fileIds = await Promise.all(uploadPromises);
-    
-    document.getElementById('loading-text').innerHTML = "保存完了！AIが最終採点しています... (約30秒)";
-    
-    // ★修正：取得した5つのファイルIDをまとめた配列(fileIds)をGASに送って採点させる
-    const res = await callGas({ action: "submit", user: user, answers: fileIds }); 
+    // 5つ分のテキストが入った配列(answers)をGASへ送信
+    const res = await callGas({ action: "submit", user: user, answers: answers }); 
     
     isTesting = false; 
     
