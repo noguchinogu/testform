@@ -8,7 +8,7 @@
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; color: #333; }
     .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; }
     h2 { color: #1a73e8; margin-bottom: 20px; }
-    input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+    input[type="text"] { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
     textarea { width: 90%; height: 150px; padding: 12px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; resize: vertical; }
     .char-count { font-size: 14px; color: #666; margin-bottom: 15px; text-align: right; width: 90%; margin-left: auto; margin-right: auto; }
     button { padding: 15px 30px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; font-weight: bold; width: 90%; transition: 0.3s; }
@@ -18,6 +18,16 @@
     .loader { display: inline-block; width: 30px; height: 30px; border: 4px solid #f3f3f3; border-top: 4px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite; margin-top: 10px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .status-text { font-size: 18px; font-weight: bold; margin-top: 15px; color: #555; }
+    
+    /* 警告ボックスのデザイン */
+    .warning-box { background: #fff3f3; border-left: 5px solid #e53935; padding: 15px; margin-bottom: 20px; text-align: left; font-size: 14px; color: #333; }
+    .warning-box strong { color: #e53935; }
+    .checkbox-wrap { text-align: left; margin-bottom: 20px; padding-left: 5%; font-weight: bold; cursor: pointer; }
+    .checkbox-wrap input { transform: scale(1.3); margin-right: 8px; cursor: pointer; }
+
+    /* 結果詳細のデザイン */
+    .result-details { text-align: left; background: #f8f9fa; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-size: 15px; }
+    .result-details hr { border: none; border-top: 1px dashed #ccc; margin: 15px 0; }
 
     #custom-confirm { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
     .confirm-box { background: white; padding: 30px; border-radius: 10px; width: 80%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
@@ -48,7 +58,18 @@
     <input type="text" id="email" placeholder="メールアドレス">
     <input type="text" id="id" placeholder="ID（数字6桁）">
     <input type="text" id="name" placeholder="氏名">
-    <button onclick="startAuth()">認証してスタート</button>
+    
+    <div class="warning-box">
+      <strong>【テスト中の禁止事項】</strong><br>
+      テスト中は、別のブラウザタブを開く、他のアプリに切り替える、または画面上部に表示される<b>アプリの通知をタップする</b>などの操作を絶対に行わないでください。<br>
+      これらの「画面から離れる操作」が検知された場合、<b>その瞬間にテストは強制終了され、途中までの内容で採点が行われます。</b>
+    </div>
+    
+    <label class="checkbox-wrap">
+      <input type="checkbox" id="consent-check" onchange="toggleStartBtn()"> 上記の注意事項を理解し、同意します。
+    </label>
+
+    <button id="start-btn" onclick="startAuth()" disabled>認証してスタート</button>
     <div id="auth-status" class="status-text" style="display:none;">
       <div class="loader"></div><br>認証中...
     </div>
@@ -70,22 +91,43 @@
 
   <div id="result-view" style="display:none;">
     <h2 id="result-title">採点完了</h2>
+    <div id="result-details" class="result-details"></div>
     <p id="result-message" class="status-text"></p>
   </div>
 </div>
 
 <script>
   // ★今の動いている新しいGASのURLを貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxHUVkSLSo9BlZRvd_txs4jvWt08xOBIZtaUi9iTmVsS_NCeGkEn2eBrhoBs6MQjc_rIg/exec"; 
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxP7Tg8uhmF97mXkfb190dM59KsybHid6PF7ykb27TzYOyCKxY7AQh_BSxW5mGlwxjyjQ/exec"; 
 
   let user = {}, cur = 1, timerInterval;
   let answers = []; 
   let isTesting = false; 
 
+  // チェックボックスでボタンを有効化
+  function toggleStartBtn() {
+    const isChecked = document.getElementById('consent-check').checked;
+    document.getElementById('start-btn').disabled = !isChecked;
+  }
+
+  // フォーカスが外れた場合の即時強制終了処理
   function handleFocusLost() {
     if (isTesting && document.getElementById('test-view').style.display === 'block') {
-      alert("【警告】別の画面やアプリへの移動が検知されました。\n不正防止のため、現在のセクションを強制終了して次に進みます。");
-      executeNext();
+      alert("【警告】画面からの離脱（別タブやアプリの表示、通知のタップ等）が検知されました。\n不正防止のためテストを強制終了し、ここまでの内容で採点を行います。");
+      
+      isTesting = false; 
+      clearInterval(timerInterval);
+      
+      // 書きかけのテキストを保存
+      answers.push(document.getElementById('answer-text').value);
+      
+      // 未回答のセクションを空文字で埋めて5つにする
+      while(answers.length < 5) {
+        answers.push("");
+      }
+      
+      // そのまま採点へ送る
+      finishTest();
     }
   }
 
@@ -104,7 +146,6 @@
     }
   });
 
-  // 文字数をカウントする関数
   function updateCharCount() {
     const textLength = document.getElementById('answer-text').value.length;
     document.getElementById('char-current').innerText = textLength;
@@ -129,6 +170,10 @@
       const res = await callGas({ action: "auth", user: user });
       
       if (res.success) {
+        // 所属シートから合格基準点を決定
+        const sheet = res.sheetName;
+        user.passScore = (sheet === "既添①" || sheet === "新添①") ? 36 : 24;
+
         isTesting = true; 
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
@@ -144,7 +189,6 @@
   }
 
   function startSection() {
-    // テキストエリアを空にして文字数をリセット
     document.getElementById('answer-text').value = '';
     updateCharCount();
 
@@ -180,9 +224,7 @@
     document.getElementById('custom-confirm').style.display = 'none'; 
     clearInterval(timerInterval);
     
-    // 入力されているテキストを配列に保存
-    const currentText = document.getElementById('answer-text').value;
-    answers.push(currentText);
+    answers.push(document.getElementById('answer-text').value);
 
     if (cur < 5) {
       cur++;
@@ -198,20 +240,43 @@
     document.getElementById('loading-view').style.display = 'block';
     document.getElementById('loading-text').innerHTML = "回答を送信中... AIが最終採点しています (約10秒)<br>画面を閉じないでください。";
     
-    // 5つ分のテキストが入った配列(answers)をGASへ送信
     const res = await callGas({ action: "submit", user: user, answers: answers }); 
     
     isTesting = false; 
-    
     document.getElementById('loading-view').style.display = 'none';
     document.getElementById('result-view').style.display = 'block';
     
+    // APIエラーが発生した場合の表示
+    if (res.isApiError) {
+      document.getElementById('result-title').innerText = "エラー";
+      document.getElementById('result-details').style.display = "none";
+      document.getElementById('result-message').innerHTML = "<span style='color:#e53935;'>採点時にエラーが発生しました。<br>所定のフォームから問い合わせてください。</span>";
+      return;
+    }
+
+    // 正常に採点された場合の表示
     let score = res.score || 0;
-    document.getElementById('result-title').innerText = `最終点数: ${score}点`;
+    let scores = res.scores || [0,0,0,0,0];
     
-    let msg = score >= 30 
+    document.getElementById('result-title').innerText = `合計得点: ${score} 点 / 60 点`;
+
+    let detailsHtml = `
+      <b>【配点情報】</b><br>
+      ・1セクションにつき12個の誤り（12点満点）<br>
+      ・合計60点満点<br>
+      <br>
+      <b>あなたの合格に必要な点数：<span style='color:#e53935; font-size:18px;'>${user.passScore}点</span></b>
+      <hr>
+      <b>【セクション別得点】</b><br>
+    `;
+    for(let i = 0; i < 5; i++) {
+      detailsHtml += `セクション ${i+1} : ${scores[i]} 点<br>`;
+    }
+    document.getElementById('result-details').innerHTML = detailsHtml;
+
+    let msg = score >= user.passScore 
       ? "<b>【合格】</b>おめでとうございます。<br>次は「フォーム④」に進んでください。" 
-      : "<b>【不合格】</b>残念ですが基準に達しませんでした。<br>次は「フォーム③」に進んでください。";
+      : "<b>【不合格】</b>残念ですが合格点に達しませんでした。<br>次は「フォーム③」に進んでください。";
     document.getElementById('result-message').innerHTML = msg;
   }
 </script>
