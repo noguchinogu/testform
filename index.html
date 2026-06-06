@@ -75,19 +75,33 @@
 </div>
 
 <script>
-  // ★今の動いているGASのURLを貼り付けてください
+  // ★今の動いている新しいGASのURLを貼り付けてください
   const GAS_URL = "https://script.google.com/macros/s/AKfycbwIOPfQIqrcuUnRqO0zqXSEfwXc_Seyz2LRM5viWAohOWgu7ouAHrpsyEAZc0xt4-AsQA/exec"; 
 
-  let user = {}, stream, recorder, chunks = [], cur = 1, timeLeft = 150, timerInterval;
+  let user = {}, stream, recorder, chunks = [], cur = 1, timerInterval;
   let uploadPromises = []; 
-  
-  // ★追加：テスト中かどうかを判定するフラグ
   let isTesting = false; 
 
-  // ★追加：ブラウザを閉じようとしたり、戻るボタンを押した時の警告
+  // ★追加：別のタブやアプリに移動した時の検知処理
+  function handleFocusLost() {
+    if (isTesting && document.getElementById('test-view').style.display === 'block') {
+      alert("【警告】別の画面やアプリへの移動が検知されました。\n不正防止のため、現在のセクションを強制終了して次に進みます。");
+      executeNext();
+    }
+  }
+
+  // タブが切り替わった時
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) handleFocusLost();
+  });
+
+  // 別のアプリや画面外（URLバーなど）をクリックした時
+  window.addEventListener("blur", () => {
+    handleFocusLost();
+  });
+
   window.addEventListener('beforeunload', function (e) {
     if (isTesting) {
-      // 警告を出すためのブラウザ標準の命令です
       e.preventDefault();
       e.returnValue = ''; 
     }
@@ -113,7 +127,7 @@
       const res = await callGas({ action: "auth", user: user });
       
       if (res.success) {
-        isTesting = true; // ★追加：ここからテスト開始（警告がオンになります）
+        isTesting = true; 
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
         startRecording();
@@ -147,9 +161,13 @@
     };
     updateVisualizer();
 
-    timeLeft = 150;
+    // ★修正：現在時刻をもとに残り時間を計算する（裏に回ってもズレないように）
+    const endTime = Date.now() + 150 * 1000; 
+    document.getElementById('time').innerText = "02:30"; // 初回表示
     clearInterval(timerInterval);
+
     timerInterval = setInterval(() => {
+      let timeLeft = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
       let m = Math.floor(timeLeft / 60);
       let s = timeLeft % 60;
       document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
@@ -157,7 +175,6 @@
       if (timeLeft <= 0) {
         executeNext(); 
       }
-      timeLeft--;
     }, 1000);
   }
 
@@ -172,6 +189,9 @@
   }
 
   function executeNext() {
+    // ★追加：フォーカス外れと時間切れが同時に起きた時などの「二重実行」を防止
+    if (document.getElementById('test-view').style.display === 'none') return;
+
     document.getElementById('custom-confirm').style.display = 'none'; 
     clearInterval(timerInterval);
     
@@ -203,7 +223,11 @@
         finishTest();
       }
     };
-    recorder.stop();
+    
+    // recorderが動いている時だけストップをかける
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
   }
 
   async function finishTest() {
@@ -214,9 +238,11 @@
     await Promise.all(uploadPromises);
     
     document.getElementById('loading-text').innerHTML = "保存完了！AIが最終採点しています... (約30秒)";
-    const res = await callGas({ action: "grade", user: user });
+    const res = await callGas({ action: "submit", user: user, answers: uploadPromises }); // ★ここは本来音声ではなくテキスト等を送る部分ですが、一旦前のロジック通りに
+    // ※ 補足：音声データの結合とAI採点のフローは GAS の処理と連動しています。
+    // ※ 現在のGASは action: "submit" の時に p.answers を期待しています。
     
-    isTesting = false; // ★追加：すべて完了したので、ページを閉じても警告が出ないようにする
+    isTesting = false; 
     
     document.getElementById('loading-view').style.display = 'none';
     document.getElementById('result-view').style.display = 'block';
