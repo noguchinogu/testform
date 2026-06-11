@@ -109,3 +109,194 @@
     recognition.onend = function() {
       if (isSectionActive) {
         try { recognition.start(); } catch(e) {}
+      }
+    };
+  }
+
+  window.addEventListener('beforeunload', function (e) {
+    if (isTesting) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  async function callGas(data) {
+    const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
+    return await res.json();
+  }
+
+  async function startAuth() {
+    user = { 
+      email: document.getElementById('email').value.trim(), 
+      id: document.getElementById('id').value.trim(), 
+      name: document.getElementById('name').value.trim() 
+    };
+    if (!user.email || !user.id || !user.name) return alert("すべての項目を入力してください。");
+
+    if (!SpeechRecognition) return alert("お使いのブラウザは音声入力に対応していません。Chromeをご利用ください。");
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch(err) {
+      return alert("マイクへのアクセスが許可されていません。ブラウザの設定でマイクを許可してから再度お試しください。");
+    }
+
+    document.getElementById('auth-status').style.display = 'block';
+
+    try {
+      const res = await callGas({ action: "auth", user: user });
+      if (res.success) {
+        sectionImages = res.images || [];
+        const sheet = res.sheetName;
+        user.passScore = (sheet === "既添①" || sheet === "新添①") ? 36 : 24;
+
+        isTesting = true; 
+        document.getElementById('auth-view').style.display = 'none';
+        document.getElementById('test-view').style.display = 'block';
+        
+        startSection(); // タイマー付きのセクション開始へ
+      } else {
+        alert(res.message || res.error || "通信エラーが発生しました。");
+        document.getElementById('auth-status').style.display = 'none';
+      }
+    } catch (e) {
+      alert("通信エラーが発生しました。");
+      document.getElementById('auth-status').style.display = 'none';
+    }
+  }
+
+  function stopRecording() {
+    isSectionActive = false;
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+    }
+    if (recognition) {
+      try { recognition.stop(); } catch(e) {}
+    }
+  }
+
+  function startRecording() {
+    answers[cur - 1] = ""; 
+    audioChunks = [];
+    isSectionActive = true;
+
+    mediaRecorder = new MediaRecorder(mediaStream);
+    mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+    
+    mediaRecorder.onstop = () => {
+      const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = () => {
+        const base64data = reader.result.split(',')[1];
+        audioDataArray[cur - 1] = { base64: base64data, mime: audioBlob.type };
+      }
+    };
+
+    mediaRecorder.start();
+    try { recognition.start(); } catch(e) {}
+  }
+
+  function startSection() {
+    document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
+    if(sectionImages[cur - 1]) document.getElementById('question-image').src = sectionImages[cur - 1];
+
+    document.getElementById('btn-next').style.display = (cur < 5) ? 'inline-block' : 'none';
+    document.getElementById('btn-submit').style.display = (cur === 5) ? 'inline-block' : 'none';
+
+    // 録音開始
+    startRecording();
+
+    // 2分30秒のタイマー設定
+    const endTime = Date.now() + 150 * 1000; 
+    document.getElementById('time').innerText = "02:30"; 
+    clearInterval(timerInterval);
+
+    timerInterval = setInterval(() => {
+      let timeLeft = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      let m = Math.floor(timeLeft / 60);
+      let s = timeLeft % 60;
+      document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
+      
+      // 時間切れになったら自動で次へ
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        autoNext(); 
+      }
+    }, 1000);
+  }
+
+  // 時間切れ時の自動進行処理
+  async function autoNext() {
+    stopRecording();
+    // 音声データの変換が終わるのを少し待つ
+    await new Promise(r => setTimeout(r, 500)); 
+    if (cur < 5) { 
+      cur++; 
+      startSection(); 
+    } else {
+      finishTest();
+    }
+  }
+
+  // 手動で次へ進むボタン
+  async function goNext() {
+    clearInterval(timerInterval); // タイマーを止める
+    stopRecording();
+    await new Promise(r => setTimeout(r, 500));
+    if (cur < 5) { 
+      cur++; 
+      startSection(); 
+    }
+  }
+
+  async function confirmSubmit() {
+    if(confirm("解答を終了し、採点を開始します。よろしいですか？")) {
+      clearInterval(timerInterval);
+      stopRecording();
+      await new Promise(r => setTimeout(r, 500));
+      finishTest();
+    }
+  }
+
+  async function finishTest() {
+    document.getElementById('test-view').style.display = 'none';
+    document.getElementById('loading-view').style.display = 'block';
+    
+    const res = await callGas({ action: "submit", user: user, answers: answers, audioData: audioDataArray }); 
+    
+    isTesting = false; 
+    document.getElementById('loading-view').style.display = 'none';
+    document.getElementById('result-view').style.display = 'block';
+    
+    if (res.isApiError) {
+      document.getElementById('result-title').innerText = "エラー";
+      document.getElementById('result-details').style.display = "none";
+      document.getElementById('result-message').innerHTML = "<span style='color:#e53935;'>採点時にエラーが発生しました。<br>所定のフォームから再度お問い合わせください。</span>";
+      return;
+    }
+
+    let score = res.score || 0;
+    let scores = res.scores || [0,0,0,0,0];
+    
+    document.getElementById('result-title').innerText = `合計得点: ${score} 点 / 60 点`;
+
+    let detailsHtml = `
+      <b>【配点情報】</b><br>
+      ・1セクションにつき12点満点<br>
+      ・合計60点満点<br>
+      <br>
+      <b>あなたの合格に必要な点数：<span style='color:#e53935; font-size:18px;'>${user.passScore}点</span></b>
+      <hr>
+      <b>【セクション別得点】</b><br>
+    `;
+    for(let i = 0; i < 5; i++) {
+      detailsHtml += `セクション ${i+1} : ${scores[i]} 点<br>`;
+    }
+    document.getElementById('result-details').innerHTML = detailsHtml;
+
+    let msg = score >= user.passScore 
+      ? "<b>【合格】</b>おめでとうございます。<br>次は「フォーム④」に進んでください。" 
+      : "<b>【不合格】</b>残念ですが合格点に達しませんでした。<br>規定の時間を開けて再度受験してください。";
+    document.getElementById('result-message').innerHTML = msg;
+  }
+</script>
+
+</body>
+</html>
