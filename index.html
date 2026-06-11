@@ -3,153 +3,137 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>(26)研修フォーム② - 記述テスト</title>
+  <title>(26)研修フォーム③ - 画像・音声入力対応</title>
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; }
+    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     h2 { color: #1a73e8; margin-bottom: 20px; }
     input[type="text"] { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
-    textarea { width: 90%; height: 150px; padding: 12px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; resize: vertical; }
-    .char-count { font-size: 14px; color: #666; margin-bottom: 15px; text-align: right; width: 90%; margin-left: auto; margin-right: auto; }
-    button { padding: 15px 30px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; font-weight: bold; width: 90%; transition: 0.3s; }
-    button:hover { background: #1557b0; }
-    button:disabled { background: #aaa; cursor: not-allowed; }
-    .timer { font-size: 48px; font-weight: bold; color: #e53935; margin: 20px 0; font-family: monospace; }
+    textarea { width: 90%; height: 180px; padding: 12px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; resize: vertical; }
+    
+    .mic-wrap { display: flex; align-items: center; justify-content: center; margin-bottom: 15px; gap: 10px; }
+    .btn-mic { padding: 10px 20px; background: #e53935; color: white; border: none; border-radius: 30px; font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+    .btn-mic.recording { background: #555; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+    
+    .nav-buttons { display: flex; justify-content: space-between; width: 90%; margin: 0 auto; gap: 10px; }
+    button.nav-btn { flex: 1; padding: 15px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+    button.nav-btn:hover { background: #1557b0; }
+    button.nav-btn.secondary { background: #757575; }
+    button.nav-btn.secondary:hover { background: #616161; }
+
+    #question-image { max-width: 90%; height: auto; max-height: 400px; object-fit: contain; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
     .loader { display: inline-block; width: 30px; height: 30px; border: 4px solid #f3f3f3; border-top: 4px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite; margin-top: 10px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    .status-text { font-size: 18px; font-weight: bold; margin-top: 15px; color: #555; }
     
-    /* 警告ボックスのデザイン */
-    .warning-box { background: #fff3f3; border-left: 5px solid #e53935; padding: 15px; margin-bottom: 20px; text-align: left; font-size: 14px; color: #333; }
-    .warning-box strong { color: #e53935; }
-    .checkbox-wrap { text-align: left; margin-bottom: 20px; padding-left: 5%; font-weight: bold; cursor: pointer; }
-    .checkbox-wrap input { transform: scale(1.3); margin-right: 8px; cursor: pointer; }
-
-    /* 結果詳細のデザイン */
     .result-details { text-align: left; background: #f8f9fa; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-size: 15px; }
     .result-details hr { border: none; border-top: 1px dashed #ccc; margin: 15px 0; }
-
-    #custom-confirm { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
-    .confirm-box { background: white; padding: 30px; border-radius: 10px; width: 80%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-    .confirm-box p { font-size: 18px; font-weight: bold; margin-bottom: 25px; }
-    .btn-wrap { display: flex; justify-content: space-between; }
-    .btn-yes { background: #e53935; width: 48%; }
-    .btn-yes:hover { background: #c62828; }
-    .btn-no { background: #757575; width: 48%; }
-    .btn-no:hover { background: #616161; }
   </style>
 </head>
 <body>
 
-<div id="custom-confirm">
-  <div class="confirm-box">
-    <p>このセクションの回答を終了して次に進みますか？<br><span style="font-size:14px; color:#666; font-weight:normal;">(時間は進み続けます)</span></p>
-    <div class="btn-wrap">
-      <button class="btn-yes" onclick="executeNext()">はい</button>
-      <button class="btn-no" onclick="closeConfirm()">いいえ</button>
-    </div>
-  </div>
-</div>
-
 <div class="container">
   <div id="auth-view">
-    <h2>(26)研修フォーム②</h2>
-    <p>基本情報と同じ内容を入力してください。</p>
+    <h2>(26)研修フォーム③</h2>
+    <p>基本情報と同じ内容を入力してください。<br>※このフォームは時間制限や画面移動の制限はありません。辞書等を調べながら解答できます。</p>
     <input type="text" id="email" placeholder="メールアドレス">
     <input type="text" id="id" placeholder="ID（数字6桁）">
     <input type="text" id="name" placeholder="氏名">
-    
-    <div class="warning-box">
-      <strong>【テスト中の禁止事項】</strong><br>
-      テスト中は、別のブラウザタブを開く、他のアプリに切り替える、または画面上部に表示される<b>アプリの通知をタップする</b>などの操作を絶対に行わないでください。<br>
-      これらの「画面から離れる操作」が検知された場合、<b>その瞬間にテストは強制終了され、途中までの内容で採点が行われます。</b>
-    </div>
-    
-    <label class="checkbox-wrap">
-      <input type="checkbox" id="consent-check" onchange="toggleStartBtn()"> 上記の注意事項を理解し、同意します。
-    </label>
-
-    <button id="start-btn" onclick="startAuth()" disabled>認証してスタート</button>
-    <div id="auth-status" class="status-text" style="display:none;">
+    <br><br>
+    <button class="nav-btn" onclick="startAuth()" style="width:90%">認証してスタート</button>
+    <div id="auth-status" style="display:none; font-weight:bold; margin-top:15px; color:#555;">
       <div class="loader"></div><br>認証中...
     </div>
   </div>
 
   <div id="test-view" style="display:none;">
     <h3 id="section-title">セクション 1 / 5</h3>
-    <div class="timer" id="time">02:30</div>
-    <textarea id="answer-text" placeholder="ここに回答を入力してください（500字以内）" maxlength="500" oninput="updateCharCount()"></textarea>
-    <div class="char-count"><span id="char-current">0</span> / 500</div>
-    <button id="next-btn" onclick="nextSection(false)">回答を終了して次へ</button>
+    <img id="question-image" src="" alt="問題画像">
+
+    <div class="mic-wrap">
+      <button id="mic-btn" class="btn-mic" onclick="toggleMic()">🎤 音声入力</button>
+      <span id="mic-status" style="color:#e53935; font-weight:bold; font-size:14px;"></span>
+    </div>
+
+    <textarea id="answer-text" placeholder="画像を見て誤りを指摘してください（手入力も可能です）"></textarea>
+    
+    <div class="nav-buttons">
+      <button id="btn-prev" class="nav-btn secondary" onclick="goPrev()" style="display:none;">◀ 前へ</button>
+      <button id="btn-next" class="nav-btn" onclick="goNext()">次へ ▶</button>
+      <button id="btn-submit" class="nav-btn" onclick="confirmSubmit()" style="background:#4caf50; display:none;">採点して終了</button>
+    </div>
   </div>
 
   <div id="loading-view" style="display:none;">
     <h2>処理中...</h2>
     <div class="loader"></div>
-    <p id="loading-text" class="status-text"></p>
+    <p style="font-weight:bold; color:#555;">回答を送信中... AIが最終採点しています<br>※混雑時は最大40秒ほどかかる場合があります。</p>
   </div>
 
   <div id="result-view" style="display:none;">
     <h2 id="result-title">採点完了</h2>
     <div id="result-details" class="result-details"></div>
-    <p id="result-message" class="status-text"></p>
+    <p id="result-message" style="font-weight:bold; font-size:18px; color:#555;"></p>
   </div>
 </div>
 
 <script>
-  // ★今の動いている新しいGASのURLを貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxP7Tg8uhmF97mXkfb190dM59KsybHid6PF7ykb27TzYOyCKxY7AQh_BSxW5mGlwxjyjQ/exec"; 
+  // ★GASのURLを貼り付けてください
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbzQGljh-8tPy3FsvAUSpE4l_wFH7M1-3ztE4FerpWYKOTmwsPur7QN_yTLLqfGpl8q0Ww/exec"; 
 
-  let user = {}, cur = 1, timerInterval;
-  let answers = []; 
+  // ★URLはGASから受け取るため、最初は空にしておきます
+  let sectionImages = [];
+
+  let user = {};
+  let cur = 1;
+  let answers = ["", "", "", "", ""]; 
   let isTesting = false; 
 
-  // チェックボックスでボタンを有効化
-  function toggleStartBtn() {
-    const isChecked = document.getElementById('consent-check').checked;
-    document.getElementById('start-btn').disabled = !isChecked;
-  }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition;
+  let isRecording = false;
 
-  // フォーカスが外れた場合の即時強制終了処理
-  function handleFocusLost() {
-    if (isTesting && document.getElementById('test-view').style.display === 'block') {
-      alert("【警告】画面からの離脱（別タブやアプリの表示、通知のタップ等）が検知されました。\n不正防止のためテストを強制終了し、ここまでの内容で採点を行います。");
-      
-      isTesting = false; 
-      clearInterval(timerInterval);
-      
-      // 書きかけのテキストを保存
-      answers.push(document.getElementById('answer-text').value);
-      
-      // 未回答のセクションを空文字で埋めて5つにする
-      while(answers.length < 5) {
-        answers.push("");
+  if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false; 
+    recognition.lang = 'ja-JP';
+
+    recognition.onstart = function() {
+      isRecording = true;
+      document.getElementById('mic-btn').innerHTML = "⏹️ 録音停止";
+      document.getElementById('mic-btn').classList.add('recording');
+      document.getElementById('mic-status').innerText = "録音中...";
+    };
+
+    recognition.onresult = function(event) {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
       }
-      
-      // そのまま採点へ送る
-      finishTest();
-    }
+      if (finalTranscript) {
+        const ta = document.getElementById('answer-text');
+        ta.value = ta.value + finalTranscript;
+      }
+    };
+
+    recognition.onend = function() {
+      isRecording = false;
+      document.getElementById('mic-btn').innerHTML = "🎤 音声入力";
+      document.getElementById('mic-btn').classList.remove('recording');
+      document.getElementById('mic-status').innerText = "";
+    };
   }
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) handleFocusLost();
-  });
-
-  window.addEventListener("blur", () => {
-    handleFocusLost();
-  });
+  function toggleMic() {
+    if (!recognition) return alert("お使いのブラウザは音声入力に対応していません。Chromeをご利用ください。");
+    if (isRecording) recognition.stop();
+    else recognition.start();
+  }
 
   window.addEventListener('beforeunload', function (e) {
-    if (isTesting) {
-      e.preventDefault();
-      e.returnValue = ''; 
-    }
+    if (isTesting) { e.preventDefault(); e.returnValue = ''; }
   });
-
-  function updateCharCount() {
-    const textLength = document.getElementById('answer-text').value.length;
-    document.getElementById('char-current').innerText = textLength;
-  }
 
   async function callGas(data) {
     const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
@@ -168,16 +152,17 @@
 
     try {
       const res = await callGas({ action: "auth", user: user });
-      
       if (res.success) {
-        // 所属シートから合格基準点を決定
+        // ★GASから送られてきた画像URLのリストをここで受け取ります
+        sectionImages = res.images || [];
+
         const sheet = res.sheetName;
         user.passScore = (sheet === "既添①" || sheet === "新添①") ? 36 : 24;
 
         isTesting = true; 
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
-        startSection();
+        renderSection();
       } else {
         alert(res.message || res.error || "通信エラーが発生しました。");
         document.getElementById('auth-status').style.display = 'none';
@@ -188,57 +173,43 @@
     }
   }
 
-  function startSection() {
-    document.getElementById('answer-text').value = '';
-    updateCharCount();
-
-    const endTime = Date.now() + 150 * 1000; 
-    document.getElementById('time').innerText = "02:30"; 
-    clearInterval(timerInterval);
-
-    timerInterval = setInterval(() => {
-      let timeLeft = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-      let m = Math.floor(timeLeft / 60);
-      let s = timeLeft % 60;
-      document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
-      
-      if (timeLeft <= 0) {
-        executeNext(); 
-      }
-    }, 1000);
-  }
-
-  function nextSection(isAuto) {
-    if (!isAuto) {
-      document.getElementById('custom-confirm').style.display = 'flex';
-    }
-  }
-
-  function closeConfirm() {
-    document.getElementById('custom-confirm').style.display = 'none';
-  }
-
-  function executeNext() {
-    if (document.getElementById('test-view').style.display === 'none') return;
-
-    document.getElementById('custom-confirm').style.display = 'none'; 
-    clearInterval(timerInterval);
+  function renderSection() {
+    if (isRecording) toggleMic(); 
     
-    answers.push(document.getElementById('answer-text').value);
+    document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
+    // ★画像を表示
+    if(sectionImages[cur - 1]) {
+      document.getElementById('question-image').src = sectionImages[cur - 1];
+    }
+    
+    document.getElementById('answer-text').value = answers[cur - 1]; 
 
-    if (cur < 5) {
-      cur++;
-      document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
-      startSection();
-    } else {
+    document.getElementById('btn-prev').style.display = (cur > 1) ? 'inline-block' : 'none';
+    document.getElementById('btn-next').style.display = (cur < 5) ? 'inline-block' : 'none';
+    document.getElementById('btn-submit').style.display = (cur === 5) ? 'inline-block' : 'none';
+  }
+
+  function goNext() {
+    answers[cur - 1] = document.getElementById('answer-text').value; 
+    if (cur < 5) { cur++; renderSection(); }
+  }
+
+  function goPrev() {
+    answers[cur - 1] = document.getElementById('answer-text').value; 
+    if (cur > 1) { cur--; renderSection(); }
+  }
+
+  function confirmSubmit() {
+    answers[cur - 1] = document.getElementById('answer-text').value; 
+    if(confirm("5つのセクションの解答を終了し、採点を開始します。よろしいですか？")) {
       finishTest();
     }
   }
 
   async function finishTest() {
+    if (isRecording) toggleMic();
     document.getElementById('test-view').style.display = 'none';
     document.getElementById('loading-view').style.display = 'block';
-    document.getElementById('loading-text').innerHTML = "回答を送信中... AIが最終採点しています (約10秒)<br>画面を閉じないでください。";
     
     const res = await callGas({ action: "submit", user: user, answers: answers }); 
     
@@ -246,15 +217,13 @@
     document.getElementById('loading-view').style.display = 'none';
     document.getElementById('result-view').style.display = 'block';
     
-    // APIエラーが発生した場合の表示
     if (res.isApiError) {
       document.getElementById('result-title').innerText = "エラー";
       document.getElementById('result-details').style.display = "none";
-      document.getElementById('result-message').innerHTML = "<span style='color:#e53935;'>採点時にエラーが発生しました。<br>所定のフォームから問い合わせてください。</span>";
+      document.getElementById('result-message').innerHTML = "<span style='color:#e53935;'>採点時にエラーが発生しました。<br>所定のフォームから再度お問い合わせください。</span>";
       return;
     }
 
-    // 正常に採点された場合の表示
     let score = res.score || 0;
     let scores = res.scores || [0,0,0,0,0];
     
@@ -262,7 +231,7 @@
 
     let detailsHtml = `
       <b>【配点情報】</b><br>
-      ・1セクションにつき12個の誤り（12点満点）<br>
+      ・1セクションにつき12点満点<br>
       ・合計60点満点<br>
       <br>
       <b>あなたの合格に必要な点数：<span style='color:#e53935; font-size:18px;'>${user.passScore}点</span></b>
@@ -276,7 +245,7 @@
 
     let msg = score >= user.passScore 
       ? "<b>【合格】</b>おめでとうございます。<br>次は「フォーム④」に進んでください。" 
-      : "<b>【不合格】</b>残念ですが合格点に達しませんでした。<br>次は「フォーム③」に進んでください。";
+      : "<b>【不合格】</b>残念ですが合格点に達しませんでした。<br>規定の時間を開けて再度受験してください。";
     document.getElementById('result-message').innerHTML = msg;
   }
 </script>
