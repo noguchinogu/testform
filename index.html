@@ -3,16 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>(26)研修フォーム③ - 画像・音声入力対応</title>
+  <title>(26)研修フォーム③ - 音声入力専用</title>
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; color: #333; }
     .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     h2 { color: #1a73e8; margin-bottom: 20px; }
     input[type="text"] { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
-    textarea { width: 90%; height: 180px; padding: 12px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; resize: vertical; }
+    
+    /* テキストエリアを入力不可のデザインに変更 */
+    textarea { width: 90%; height: 180px; padding: 12px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; resize: vertical; background-color: #e9ecef; color: #555; cursor: not-allowed; }
     
     .mic-wrap { display: flex; align-items: center; justify-content: center; margin-bottom: 15px; gap: 10px; }
-    .btn-mic { padding: 10px 20px; background: #e53935; color: white; border: none; border-radius: 30px; font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+    .btn-mic { padding: 15px 30px; background: #e53935; color: white; border: none; border-radius: 30px; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; box-shadow: 0 4px 10px rgba(229,57,53,0.3); transition: 0.3s; }
     .btn-mic.recording { background: #555; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
     
@@ -35,7 +37,7 @@
 <div class="container">
   <div id="auth-view">
     <h2>(26)研修フォーム③</h2>
-    <p>基本情報と同じ内容を入力してください。<br>※このフォームは時間制限や画面移動の制限はありません。辞書等を調べながら解答できます。</p>
+    <p>基本情報と同じ内容を入力してください。<br>※このフォームは音声入力限定です。必ずマイクへのアクセスを許可してください。</p>
     <input type="text" id="email" placeholder="メールアドレス">
     <input type="text" id="id" placeholder="ID（数字6桁）">
     <input type="text" id="name" placeholder="氏名">
@@ -51,11 +53,11 @@
     <img id="question-image" src="" alt="問題画像">
 
     <div class="mic-wrap">
-      <button id="mic-btn" class="btn-mic" onclick="toggleMic()">🎤 音声入力</button>
+      <button id="mic-btn" class="btn-mic" onclick="toggleMic()">🎤 録音を開始する</button>
       <span id="mic-status" style="color:#e53935; font-weight:bold; font-size:14px;"></span>
     </div>
 
-    <textarea id="answer-text" placeholder="画像を見て誤りを指摘してください（手入力も可能です）"></textarea>
+    <textarea id="answer-text" placeholder="（マイクの音声がここに自動で文字起こしされます。手入力はできません。録音ボタンを押して話し始めてください。）" readonly></textarea>
     
     <div class="nav-buttons">
       <button id="btn-prev" class="nav-btn secondary" onclick="goPrev()" style="display:none;">◀ 前へ</button>
@@ -67,7 +69,7 @@
   <div id="loading-view" style="display:none;">
     <h2>処理中...</h2>
     <div class="loader"></div>
-    <p style="font-weight:bold; color:#555;">回答を送信中... AIが最終採点しています<br>※混雑時は最大40秒ほどかかる場合があります。</p>
+    <p style="font-weight:bold; color:#555;">音声ファイルをアップロードし、AIが採点しています...<br>※画面を閉じずにお待ちください。（最大1分ほどかかります）</p>
   </div>
 
   <div id="result-view" style="display:none;">
@@ -79,32 +81,28 @@
 
 <script>
   // ★GASのURLを貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbzQGljh-8tPy3FsvAUSpE4l_wFH7M1-3ztE4FerpWYKOTmwsPur7QN_yTLLqfGpl8q0Ww/exec"; 
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz70YVhqr5hr2-AoA79H9tLmLY3cCAf6MALs8vvOSbGgJdJmJ_WjSWqe-dY1AS65oQY_Q/exec"; 
 
-  // ★URLはGASから受け取るため、最初は空にしておきます
   let sectionImages = [];
-
   let user = {};
   let cur = 1;
   let answers = ["", "", "", "", ""]; 
+  let audioDataArray = [null, null, null, null, null]; // ★各セクションの音声データ(Base64)を保存するリスト
   let isTesting = false; 
 
+  // ----- 音声認識・録音の機能 -----
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition;
+  let mediaRecorder;
+  let audioChunks = [];
   let isRecording = false;
+  let mediaStream;
 
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false; 
     recognition.lang = 'ja-JP';
-
-    recognition.onstart = function() {
-      isRecording = true;
-      document.getElementById('mic-btn').innerHTML = "⏹️ 録音停止";
-      document.getElementById('mic-btn').classList.add('recording');
-      document.getElementById('mic-status').innerText = "録音中...";
-    };
 
     recognition.onresult = function(event) {
       let finalTranscript = '';
@@ -116,19 +114,56 @@
         ta.value = ta.value + finalTranscript;
       }
     };
-
-    recognition.onend = function() {
-      isRecording = false;
-      document.getElementById('mic-btn').innerHTML = "🎤 音声入力";
-      document.getElementById('mic-btn').classList.remove('recording');
-      document.getElementById('mic-status').innerText = "";
-    };
   }
 
-  function toggleMic() {
-    if (!recognition) return alert("お使いのブラウザは音声入力に対応していません。Chromeをご利用ください。");
-    if (isRecording) recognition.stop();
-    else recognition.start();
+  async function toggleMic() {
+    if (!SpeechRecognition) return alert("お使いのブラウザは音声入力に対応していません。ChromeまたはSafariの最新版をご利用ください。");
+
+    if (isRecording) {
+      // 録音停止
+      recognition.stop();
+      if(mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      isRecording = false;
+      document.getElementById('mic-btn').innerHTML = "🎤 再録音する（上書き）";
+      document.getElementById('mic-btn').classList.remove('recording');
+      document.getElementById('mic-status').innerText = "";
+    } else {
+      // 録音開始
+      try {
+        if (!mediaStream) {
+          mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
+        
+        // 再録音の場合はテキストをクリア
+        document.getElementById('answer-text').value = ""; 
+        audioChunks = [];
+        
+        mediaRecorder = new MediaRecorder(mediaStream);
+        mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = () => {
+            // Base64の文字列だけを取り出す
+            const base64data = reader.result.split(',')[1];
+            audioDataArray[cur - 1] = { base64: base64data, mime: audioBlob.type };
+          }
+        };
+
+        mediaRecorder.start();
+        recognition.start();
+        
+        isRecording = true;
+        document.getElementById('mic-btn').innerHTML = "⏹️ 録音を停止する";
+        document.getElementById('mic-btn').classList.add('recording');
+        document.getElementById('mic-status').innerText = "録音中...";
+      } catch(err) {
+        alert("マイクへのアクセスが許可されていません。ブラウザの設定を確認してください。");
+      }
+    }
   }
 
   window.addEventListener('beforeunload', function (e) {
@@ -153,9 +188,7 @@
     try {
       const res = await callGas({ action: "auth", user: user });
       if (res.success) {
-        // ★GASから送られてきた画像URLのリストをここで受け取ります
         sectionImages = res.images || [];
-
         const sheet = res.sheetName;
         user.passScore = (sheet === "既添①" || sheet === "新添①") ? 36 : 24;
 
@@ -174,32 +207,39 @@
   }
 
   function renderSection() {
-    if (isRecording) toggleMic(); 
-    
     document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
-    // ★画像を表示
-    if(sectionImages[cur - 1]) {
-      document.getElementById('question-image').src = sectionImages[cur - 1];
-    }
+    if(sectionImages[cur - 1]) document.getElementById('question-image').src = sectionImages[cur - 1];
     
     document.getElementById('answer-text').value = answers[cur - 1]; 
+    document.getElementById('mic-btn').innerHTML = answers[cur - 1] ? "🎤 再録音する（上書き）" : "🎤 録音を開始する";
 
     document.getElementById('btn-prev').style.display = (cur > 1) ? 'inline-block' : 'none';
     document.getElementById('btn-next').style.display = (cur < 5) ? 'inline-block' : 'none';
     document.getElementById('btn-submit').style.display = (cur === 5) ? 'inline-block' : 'none';
   }
 
+  function checkRecordingState() {
+    if (isRecording) {
+      alert("先に録音を停止してください。");
+      return false;
+    }
+    return true;
+  }
+
   function goNext() {
+    if(!checkRecordingState()) return;
     answers[cur - 1] = document.getElementById('answer-text').value; 
     if (cur < 5) { cur++; renderSection(); }
   }
 
   function goPrev() {
+    if(!checkRecordingState()) return;
     answers[cur - 1] = document.getElementById('answer-text').value; 
     if (cur > 1) { cur--; renderSection(); }
   }
 
   function confirmSubmit() {
+    if(!checkRecordingState()) return;
     answers[cur - 1] = document.getElementById('answer-text').value; 
     if(confirm("5つのセクションの解答を終了し、採点を開始します。よろしいですか？")) {
       finishTest();
@@ -207,11 +247,11 @@
   }
 
   async function finishTest() {
-    if (isRecording) toggleMic();
     document.getElementById('test-view').style.display = 'none';
     document.getElementById('loading-view').style.display = 'block';
     
-    const res = await callGas({ action: "submit", user: user, answers: answers }); 
+    // ★音声データ(audioDataArray)を含めてGASへ送信
+    const res = await callGas({ action: "submit", user: user, answers: answers, audioData: audioDataArray }); 
     
     isTesting = false; 
     document.getElementById('loading-view').style.display = 'none';
