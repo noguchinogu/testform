@@ -10,15 +10,7 @@
     h2 { color: #1a73e8; margin-bottom: 20px; }
     input[type="text"] { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
     
-    /* テキストエリアを入力不可のデザインに変更 */
-    textarea { width: 90%; height: 180px; padding: 12px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; resize: vertical; background-color: #e9ecef; color: #555; cursor: not-allowed; }
-    
-    .mic-wrap { display: flex; align-items: center; justify-content: center; margin-bottom: 15px; gap: 10px; }
-    .btn-mic { padding: 15px 30px; background: #e53935; color: white; border: none; border-radius: 30px; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; box-shadow: 0 4px 10px rgba(229,57,53,0.3); transition: 0.3s; }
-    .btn-mic.recording { background: #555; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-    
-    .nav-buttons { display: flex; justify-content: space-between; width: 90%; margin: 0 auto; gap: 10px; }
+    .nav-buttons { display: flex; justify-content: space-between; width: 90%; margin: 0 auto; gap: 10px; margin-top: 20px; }
     button.nav-btn { flex: 1; padding: 15px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; font-weight: bold; transition: 0.3s; }
     button.nav-btn:hover { background: #1557b0; }
     button.nav-btn.secondary { background: #757575; }
@@ -28,6 +20,11 @@
     .loader { display: inline-block; width: 30px; height: 30px; border: 4px solid #f3f3f3; border-top: 4px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite; margin-top: 10px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     
+    /* 録音中のアニメーション表示 */
+    .recording-box { background: #fff3f3; border: 2px dashed #e53935; padding: 20px; border-radius: 8px; margin: 20px auto; width: 85%; color: #d32f2f; font-weight: bold; }
+    .pulsing-mic { font-size: 30px; animation: pulse 1s infinite; margin-bottom: 10px; display: inline-block; }
+    @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+
     .result-details { text-align: left; background: #f8f9fa; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-size: 15px; }
     .result-details hr { border: none; border-top: 1px dashed #ccc; margin: 15px 0; }
   </style>
@@ -37,7 +34,7 @@
 <div class="container">
   <div id="auth-view">
     <h2>(26)研修フォーム③</h2>
-    <p>基本情報と同じ内容を入力してください。<br>※このフォームは音声入力限定です。必ずマイクへのアクセスを許可してください。</p>
+    <p>基本情報と同じ内容を入力してください。<br>※このフォームは音声入力限定です。開始時に必ずマイクへのアクセスを許可してください。</p>
     <input type="text" id="email" placeholder="メールアドレス">
     <input type="text" id="id" placeholder="ID（数字6桁）">
     <input type="text" id="name" placeholder="氏名">
@@ -52,17 +49,15 @@
     <h3 id="section-title">セクション 1 / 5</h3>
     <img id="question-image" src="" alt="問題画像">
 
-    <div class="mic-wrap">
-      <button id="mic-btn" class="btn-mic" onclick="toggleMic()">🎤 録音を開始する</button>
-      <span id="mic-status" style="color:#e53935; font-weight:bold; font-size:14px;"></span>
+    <div class="recording-box">
+      <span class="pulsing-mic">🎤</span>
+      <p>現在、マイクで音声を自動録音しています。<br>画像を見て、声に出して誤りを指摘してください。</p>
     </div>
-
-    <textarea id="answer-text" placeholder="（マイクの音声がここに自動で文字起こしされます。手入力はできません。録音ボタンを押して話し始めてください。）" readonly></textarea>
     
     <div class="nav-buttons">
-      <button id="btn-prev" class="nav-btn secondary" onclick="goPrev()" style="display:none;">◀ 前へ</button>
-      <button id="btn-next" class="nav-btn" onclick="goNext()">次へ ▶</button>
-      <button id="btn-submit" class="nav-btn" onclick="confirmSubmit()" style="background:#4caf50; display:none;">採点して終了</button>
+      <button id="btn-prev" class="nav-btn secondary" onclick="goPrev()" style="display:none;">◀ 前の画像へ戻る</button>
+      <button id="btn-next" class="nav-btn" onclick="goNext()">次の画像へ進む ▶</button>
+      <button id="btn-submit" class="nav-btn" onclick="confirmSubmit()" style="background:#4caf50; display:none;">回答終了（採点へ）</button>
     </div>
   </div>
 
@@ -80,23 +75,21 @@
 </div>
 
 <script>
-  // ★GASのURLを貼り付けてください
   const GAS_URL = "https://script.google.com/macros/s/AKfycbz70YVhqr5hr2-AoA79H9tLmLY3cCAf6MALs8vvOSbGgJdJmJ_WjSWqe-dY1AS65oQY_Q/exec"; 
 
   let sectionImages = [];
   let user = {};
   let cur = 1;
   let answers = ["", "", "", "", ""]; 
-  let audioDataArray = [null, null, null, null, null]; // ★各セクションの音声データ(Base64)を保存するリスト
+  let audioDataArray = [null, null, null, null, null]; 
   let isTesting = false; 
 
-  // ----- 音声認識・録音の機能 -----
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition;
   let mediaRecorder;
   let audioChunks = [];
-  let isRecording = false;
   let mediaStream;
+  let isSectionActive = false; 
 
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
@@ -104,66 +97,19 @@
     recognition.interimResults = false; 
     recognition.lang = 'ja-JP';
 
+    // 文字起こし結果は画面に出さず、裏の配列にだけこっそり足していく
     recognition.onresult = function(event) {
-      let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-      }
-      if (finalTranscript) {
-        const ta = document.getElementById('answer-text');
-        ta.value = ta.value + finalTranscript;
+        if (event.results[i].isFinal) answers[cur - 1] += event.results[i][0].transcript;
       }
     };
-  }
-
-  async function toggleMic() {
-    if (!SpeechRecognition) return alert("お使いのブラウザは音声入力に対応していません。ChromeまたはSafariの最新版をご利用ください。");
-
-    if (isRecording) {
-      // 録音停止
-      recognition.stop();
-      if(mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
+    
+    // 沈黙で勝手に止まった場合は自動で再スタートする（録音中の場合のみ）
+    recognition.onend = function() {
+      if (isSectionActive) {
+        try { recognition.start(); } catch(e) {}
       }
-      isRecording = false;
-      document.getElementById('mic-btn').innerHTML = "🎤 再録音する（上書き）";
-      document.getElementById('mic-btn').classList.remove('recording');
-      document.getElementById('mic-status').innerText = "";
-    } else {
-      // 録音開始
-      try {
-        if (!mediaStream) {
-          mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        }
-        
-        // 再録音の場合はテキストをクリア
-        document.getElementById('answer-text').value = ""; 
-        audioChunks = [];
-        
-        mediaRecorder = new MediaRecorder(mediaStream);
-        mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
-        mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-          const reader = new FileReader();
-          reader.readAsDataURL(audioBlob);
-          reader.onloadend = () => {
-            // Base64の文字列だけを取り出す
-            const base64data = reader.result.split(',')[1];
-            audioDataArray[cur - 1] = { base64: base64data, mime: audioBlob.type };
-          }
-        };
-
-        mediaRecorder.start();
-        recognition.start();
-        
-        isRecording = true;
-        document.getElementById('mic-btn').innerHTML = "⏹️ 録音を停止する";
-        document.getElementById('mic-btn').classList.add('recording');
-        document.getElementById('mic-status').innerText = "録音中...";
-      } catch(err) {
-        alert("マイクへのアクセスが許可されていません。ブラウザの設定を確認してください。");
-      }
-    }
+    };
   }
 
   window.addEventListener('beforeunload', function (e) {
@@ -183,6 +129,14 @@
     };
     if (!user.email || !user.id || !user.name) return alert("すべての項目を入力してください。");
 
+    // ★スタートボタンを押した瞬間にマイクの許可を強制的に求める
+    if (!SpeechRecognition) return alert("お使いのブラウザは音声入力に対応していません。Chromeをご利用ください。");
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch(err) {
+      return alert("マイクへのアクセスが許可されていません。ブラウザの設定でマイクを許可してから再度お試しください。");
+    }
+
     document.getElementById('auth-status').style.display = 'block';
 
     try {
@@ -195,6 +149,8 @@
         isTesting = true; 
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
+        
+        // 最初のセクションを描画し、裏側で録音を強制スタート
         renderSection();
       } else {
         alert(res.message || res.error || "通信エラーが発生しました。");
@@ -206,42 +162,72 @@
     }
   }
 
+  // 音声を止めて、Base64データとして保存する
+  function stopRecording() {
+    isSectionActive = false;
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+    }
+    if (recognition) {
+      try { recognition.stop(); } catch(e) {}
+    }
+  }
+
+  // 新しいセクションの録音を自動スタートする
+  function startRecording() {
+    answers[cur - 1] = ""; // 以前の解答テキストをリセット
+    audioChunks = [];
+    isSectionActive = true;
+
+    mediaRecorder = new MediaRecorder(mediaStream);
+    mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+    
+    // 録音が止まったら自動的にファイルを変換して裏で保持する
+    mediaRecorder.onstop = () => {
+      const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = () => {
+        const base64data = reader.result.split(',')[1];
+        audioDataArray[cur - 1] = { base64: base64data, mime: audioBlob.type };
+      }
+    };
+
+    mediaRecorder.start();
+    try { recognition.start(); } catch(e) {}
+  }
+
   function renderSection() {
     document.getElementById('section-title').innerText = `セクション ${cur} / 5`;
     if(sectionImages[cur - 1]) document.getElementById('question-image').src = sectionImages[cur - 1];
-    
-    document.getElementById('answer-text').value = answers[cur - 1]; 
-    document.getElementById('mic-btn').innerHTML = answers[cur - 1] ? "🎤 再録音する（上書き）" : "🎤 録音を開始する";
 
     document.getElementById('btn-prev').style.display = (cur > 1) ? 'inline-block' : 'none';
     document.getElementById('btn-next').style.display = (cur < 5) ? 'inline-block' : 'none';
     document.getElementById('btn-submit').style.display = (cur === 5) ? 'inline-block' : 'none';
+
+    // 画面が切り替わったら自動で録音開始
+    startRecording();
   }
 
-  function checkRecordingState() {
-    if (isRecording) {
-      alert("先に録音を停止してください。");
-      return false;
-    }
-    return true;
-  }
-
-  function goNext() {
-    if(!checkRecordingState()) return;
-    answers[cur - 1] = document.getElementById('answer-text').value; 
+  // 次や前に進むときは、一度録音を止めて少し待つ（データ保存処理のため）
+  async function goNext() {
+    stopRecording();
+    await new Promise(r => setTimeout(r, 300));
     if (cur < 5) { cur++; renderSection(); }
   }
 
-  function goPrev() {
-    if(!checkRecordingState()) return;
-    answers[cur - 1] = document.getElementById('answer-text').value; 
-    if (cur > 1) { cur--; renderSection(); }
+  async function goPrev() {
+    if(confirm("前のセクションに戻ると、現在のセクションの録音データは上書きされます。よろしいですか？")) {
+      stopRecording();
+      await new Promise(r => setTimeout(r, 300));
+      if (cur > 1) { cur--; renderSection(); }
+    }
   }
 
-  function confirmSubmit() {
-    if(!checkRecordingState()) return;
-    answers[cur - 1] = document.getElementById('answer-text').value; 
-    if(confirm("5つのセクションの解答を終了し、採点を開始します。よろしいですか？")) {
+  async function confirmSubmit() {
+    if(confirm("解答を終了し、採点を開始します。よろしいですか？")) {
+      stopRecording();
+      await new Promise(r => setTimeout(r, 300));
       finishTest();
     }
   }
@@ -250,7 +236,6 @@
     document.getElementById('test-view').style.display = 'none';
     document.getElementById('loading-view').style.display = 'block';
     
-    // ★音声データ(audioDataArray)を含めてGASへ送信
     const res = await callGas({ action: "submit", user: user, answers: answers, audioData: audioDataArray }); 
     
     isTesting = false; 
