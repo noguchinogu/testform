@@ -24,6 +24,10 @@
     .pulsing-mic { font-size: 30px; animation: pulse 1s infinite; margin-bottom: 5px; display: inline-block; }
     @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
+    /* 音量メーター用のスタイル定義 */
+    .volume-container { width: 80%; height: 12px; background: #e0e0e0; border-radius: 6px; margin: 15px auto 0 auto; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); }
+    .volume-bar { width: 0%; height: 100%; background: #4caf50; transition: width 0.05s ease; }
+
     .result-details { text-align: left; background: #f8f9fa; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-size: 15px; }
     .result-details hr { border: none; border-top: 1px dashed #ccc; margin: 15px 0; }
   </style>
@@ -40,7 +44,7 @@
     <br><br>
     <button class="nav-btn" onclick="startAuth()" style="width:90%">認証してスタート</button>
     <div id="auth-status" style="display:none; font-weight:bold; margin-top:15px; color:#555;">
-      <div class="loader"></div><br><span id="auth-text">認証中...</span>
+      <div class="loader"></div><br><span>ユーザー認証中...</span>
     </div>
   </div>
 
@@ -53,7 +57,11 @@
 
     <div class="recording-box">
       <span class="pulsing-mic">🎤</span>
-      <p>現在、マイクで音声を自動録音しています。<br>画像を見て、声に出して誤りを指摘してください。<br><span style="font-size:13px; font-weight:normal; color:#666;">※2分30秒経過すると自動的に次へ進みます</span></p>
+      <p>画像を見て、声に出して誤りを指摘してください。<br><span style="font-size:13px; font-weight:normal; color:#666;">※2分30秒経過すると自動的に次へ進みます</span></p>
+      
+      <div class="volume-container">
+        <div id="volume-bar" class="volume-bar"></div>
+      </div>
     </div>
     
     <div class="nav-buttons">
@@ -65,7 +73,7 @@
   <div id="loading-view" style="display:none;">
     <h2>処理中...</h2>
     <div class="loader"></div>
-    <p style="font-weight:bold; color:#555;">音声ファイルを保存し、AIが採点しています...<br>※画面を閉じずにお待ちください。（最大1分ほどかかります）</p>
+    <p style="font-weight:bold; color:#555;">採点中 ※画面を閉じずにお待ちください。（最大2-3分ほどかかります）</p>
   </div>
 
   <div id="result-view" style="display:none;">
@@ -86,6 +94,7 @@
   let audioDataArray = [null, null, null, null, null]; 
   let isTesting = false; 
   let timerInterval; 
+  let currentSectionEndTime = 0; // 残り時間を正確に計算するためのタイムスタンプ
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition;
@@ -117,7 +126,6 @@
     if (isTesting) { e.preventDefault(); e.returnValue = ''; }
   });
 
-  // 通信エラーハンドリングを強化
   async function callGas(data) {
     try {
       const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(data) });
@@ -136,11 +144,16 @@
     };
     if (!user.email || !user.id || !user.name) return alert("すべての項目を入力してください。");
 
+    if (!SpeechRecognition) return alert("お使いのブラウザは音声入力に対応していません。ChromeまたはSafariをご利用ください。");
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch(err) {
+      return alert("マイクへのアクセスが許可されませんでした。ブラウザの鍵マークなどからマイクを許可して、ページを再読み込みしてください。");
+    }
+
     document.getElementById('auth-status').style.display = 'block';
-    document.getElementById('auth-text').innerText = "ユーザー認証中...";
 
     try {
-      // 1. まず先にGASとの通信（認証）を行う
       const res = await callGas({ action: "auth", user: user });
       
       if (res.success) {
@@ -148,24 +161,12 @@
         const sheet = res.sheetName;
         user.passScore = (sheet === "既添①" || sheet === "新添①") ? 36 : 24;
 
-        // 2. 認証が成功したら、マイクの許可を求める
-        document.getElementById('auth-text').innerText = "マイクを初期化中...";
-        if (!SpeechRecognition) {
-          document.getElementById('auth-status').style.display = 'none';
-          return alert("お使いのブラウザは音声入力に対応していません。ChromeまたはSafariをご利用ください。");
-        }
-
-        try {
-          mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch(err) {
-          document.getElementById('auth-status').style.display = 'none';
-          return alert("マイクへのアクセスが許可されませんでした。ブラウザの鍵マークなどからマイクを許可して、ページを再読み込みしてください。");
-        }
-
-        // 3. すべて成功したら画面を切り替えてスタート
         isTesting = true; 
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
+        
+        // 音量メーター機能を起動
+        startVolumeMeter(mediaStream);
         
         startSection(); 
       } else {
@@ -176,6 +177,45 @@
       alert(e.message || "予期せぬエラーが発生しました。");
       document.getElementById('auth-status').style.display = 'none';
     }
+  }
+
+  // リアルタイムに音量を解析してバーを伸縮させる関数
+  function startVolumeMeter(stream) {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(stream);
+      analyser.fftSize = 64; 
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      source.connect(analyser);
+
+      function updateMeter() {
+        if (!isTesting) return; 
+        
+        if (!isSectionActive) {
+          document.getElementById('volume-bar').style.width = '0%';
+        } else {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i];
+          }
+          let average = sum / bufferLength;
+          let volumePercent = Math.min(100, (average / 70) * 100); 
+          document.getElementById('volume-bar').style.width = volumePercent + '%';
+        }
+        requestAnimationFrame(updateMeter);
+      }
+      updateMeter();
+    } catch (e) {
+      console.error("音量メーターの起動に失敗しました:", e);
+    }
+  }
+
+  // 残り秒数を計算する関数
+  function getSecondsLeft() {
+    return Math.max(0, Math.floor((currentSectionEndTime - Date.now()) / 1000));
   }
 
   function stopRecording() {
@@ -223,12 +263,12 @@
 
     startRecording();
 
-    const endTime = Date.now() + 150 * 1000; 
+    currentSectionEndTime = Date.now() + 150 * 1000; 
     document.getElementById('time').innerText = "02:30"; 
     clearInterval(timerInterval);
 
     timerInterval = setInterval(() => {
-      let timeLeft = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      let timeLeft = getSecondsLeft();
       let m = Math.floor(timeLeft / 60);
       let s = timeLeft % 60;
       document.getElementById('time').innerText = `${m}:${s.toString().padStart(2,'0')}`;
@@ -252,6 +292,10 @@
   }
 
   async function goNext() {
+    // 残り時間が2分（120秒）より多い場合は進まない（開始30秒間は無効化）
+    if (getSecondsLeft() > 120) {
+      return; 
+    }
     clearInterval(timerInterval); 
     stopRecording();
     await new Promise(r => setTimeout(r, 500));
@@ -262,12 +306,15 @@
   }
 
   async function confirmSubmit() {
-    if(confirm("解答を終了し、採点を開始します。よろしいですか？")) {
-      clearInterval(timerInterval);
-      stopRecording();
-      await new Promise(r => setTimeout(r, 500));
-      finishTest();
+    // 残り時間が2分（120秒）より多い場合は進まない
+    if (getSecondsLeft() > 120) {
+      return;
     }
+    // ポップアップ(confirm)を完全に廃止し、即座に終了処理へ移行
+    clearInterval(timerInterval);
+    stopRecording();
+    await new Promise(r => setTimeout(r, 500));
+    finishTest();
   }
 
   async function finishTest() {
@@ -308,8 +355,8 @@
       document.getElementById('result-details').innerHTML = detailsHtml;
 
       let msg = score >= user.passScore 
-        ? "<b>【合格】</b>おめでとうございます。合格です。" 
-        : "<b>【不合格】</b>残念ですが合格点に達しませんでした。<br>フォーム②の2に回答してください。";
+        ? "<b>【合格】</b>合格です。。" 
+        : "<b>【不合格】</b>残念ですが合格点に達しませんでした。フォーム②の2を回答してください。";
       document.getElementById('result-message').innerHTML = msg;
 
     } catch(e) {
