@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>(26)研修フォーム②の1 - 音声入力専用</title>
+  <title>(26)研修フォーム③ - 音声入力専用</title>
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; color: #333; }
     .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
@@ -84,7 +84,7 @@
 
 <script>
   // ★あなたのGASのURLをここに貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxp9tdcnYz-lnb2QRoqCftWPx_HuHJAWQarCzsCeP3SqA7ct_y_aLMaX9jmER2VCgrysw/exec"; 
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxTvG_D_GN0ycH6ng15xZxpA2ISFrzYbKBdBSYOAuUsLdH8zW-FaMT_BUgzjCxO-1nV7A/exec"; 
 
   let sectionImages = [];
   let user = {};
@@ -159,12 +159,12 @@
         sectionImages = res.images || [];
         const sheet = res.sheetName;
         
-        // ★所属シートに基づく合否判定ロジックの設定
+        // 合格ラインを27点に設定
         if (sheet === "既添①" || sheet === "新添①") {
           user.hasPassFail = true;
-          user.passScore = 30; // 合格ラインは30点
+          user.passScore = 27; 
         } else {
-          user.hasPassFail = false; // 合否判定なし
+          user.hasPassFail = false; 
         }
 
         isTesting = true; 
@@ -234,6 +234,7 @@
     answers[cur - 1] = ""; 
     audioChunks = [];
     isSectionActive = true;
+    const currentSectionIndex = cur - 1; 
 
     try {
       mediaRecorder = new MediaRecorder(mediaStream);
@@ -245,7 +246,7 @@
         reader.readAsDataURL(audioBlob);
         reader.onloadend = () => {
           const base64data = reader.result.split(',')[1];
-          audioDataArray[cur - 1] = { base64: base64data, mime: audioBlob.type };
+          audioDataArray[currentSectionIndex] = { base64: base64data, mime: audioBlob.type };
         }
       };
 
@@ -332,28 +333,34 @@
 
       let score = res.score || 0;
       let scores = res.scores || [0,0,0,0,0];
-      
-      document.getElementById('result-title').innerText = `合計得点: ${score} 点 / 60 点`;
+      let isPassed = user.hasPassFail && (score >= user.passScore);
 
-      // ★セクションごとの点数を表示する仕様に戻しました
-      let detailsHtml = `
-        <b>【配点情報】</b><br>
-        ・1セクションにつき12個誤りがあり、12点満点<br>
-        ・合計60点満点<br>
-        <hr>
-        <b>【セクション別得点】</b><br>
-      `;
-      for(let i = 0; i < 5; i++) {
-        detailsHtml += `セクション ${i+1} : ${scores[i]} 点<br>`;
+      // ★ 合格の場合はタイトルを「採点完了」のみにし、詳細情報ボックスを完全に非表示にする
+      if (isPassed) {
+        document.getElementById('result-title').innerText = "採点完了";
+        document.getElementById('result-details').style.display = "none"; 
+      } else {
+        document.getElementById('result-title').innerText = `合計得点: ${score} 点 / 60 点`;
+        document.getElementById('result-details').style.display = "block";
+        let detailsHtml = `
+          <b>【配点情報】</b><br>
+          ・1セクションにつき12点満点<br>
+          ・合計60点満点<br>
+          <hr>
+          <b>【セクション別得点】</b><br>
+        `;
+        for(let i = 0; i < 5; i++) {
+          detailsHtml += `セクション ${i+1} : ${scores[i]} 点<br>`;
+        }
+        document.getElementById('result-details').innerHTML = detailsHtml;
       }
-      document.getElementById('result-details').innerHTML = detailsHtml;
 
       let msg = "";
-      // ★シートに応じた合否メッセージの分岐
       if (user.hasPassFail) {
-        msg = score >= user.passScore 
-          ? `<b>【合格】</b>おめでとうございます。<br>合格基準（${user.passScore}点）をクリアしました。<br>※AIによる音声採点は、時々大きく誤ることがあります。誤って合格と表示した事例に該当する場合、リーダーから後日連絡させていただきます。` 
-          : `<b>【不合格】</b>残念ですが合格基準（${user.passScore}点）に達しませんでした。<br>フォーム②の2を受けてください。`;
+        // 合格メッセージからも点数の表記を削除
+        msg = isPassed 
+          ? `<b>【合格】</b>おめでとうございます。<br>合格基準をクリアしました。次は「フォーム④」に進んでください。` 
+          : `<b>【不合格】</b>残念ですが合格基準（${user.passScore}点）に達しませんでした。<br>規定の時間を開けて再度受験してください。`;
       } else {
         msg = "<b>【採点完了】</b>お疲れ様でした。結果は上記の通りです。";
       }
