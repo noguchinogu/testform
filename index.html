@@ -24,7 +24,6 @@
     .pulsing-mic { font-size: 30px; animation: pulse 1s infinite; margin-bottom: 5px; display: inline-block; }
     @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
-    /* 音量メーター用のスタイル定義 */
     .volume-container { width: 80%; height: 12px; background: #e0e0e0; border-radius: 6px; margin: 15px auto 0 auto; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); }
     .volume-bar { width: 0%; height: 100%; background: #4caf50; transition: width 0.05s ease; }
 
@@ -85,7 +84,7 @@
 
 <script>
   // ★あなたのGASのURLをここに貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbzXgdH61UKvTYgNZci4V7l4vPSXAT--DmNjBrTAnvD9ijhbT6sA577OYdJXayNa7jT2dg/exec"; 
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxvzJKdMoDmuCUWKvhcNE_66_40iw9KZLyCLN3RFs53AIqs08iTibXi1-VsMZ7UnWyT1Q/exec"; 
 
   let sectionImages = [];
   let user = {};
@@ -94,7 +93,7 @@
   let audioDataArray = [null, null, null, null, null]; 
   let isTesting = false; 
   let timerInterval; 
-  let currentSectionEndTime = 0; // 残り時間を正確に計算するためのタイムスタンプ
+  let currentSectionEndTime = 0; 
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition;
@@ -159,15 +158,20 @@
       if (res.success) {
         sectionImages = res.images || [];
         const sheet = res.sheetName;
-        user.passScore = (sheet === "既添①" || sheet === "新添①") ? 36 : 24;
+        
+        // ★所属シートに基づく合否判定ロジックの設定
+        if (sheet === "既添①" || sheet === "新添①") {
+          user.hasPassFail = true;
+          user.passScore = 30; // 合格ラインは30点
+        } else {
+          user.hasPassFail = false; // 合否判定なし
+        }
 
         isTesting = true; 
         document.getElementById('auth-view').style.display = 'none';
         document.getElementById('test-view').style.display = 'block';
         
-        // 音量メーター機能を起動
         startVolumeMeter(mediaStream);
-        
         startSection(); 
       } else {
         alert(res.message || "登録情報と一致しません。");
@@ -179,7 +183,6 @@
     }
   }
 
-  // リアルタイムに音量を解析してバーを伸縮させる関数
   function startVolumeMeter(stream) {
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -213,7 +216,6 @@
     }
   }
 
-  // 残り秒数を計算する関数
   function getSecondsLeft() {
     return Math.max(0, Math.floor((currentSectionEndTime - Date.now()) / 1000));
   }
@@ -292,10 +294,7 @@
   }
 
   async function goNext() {
-    // 残り時間が2分（120秒）より多い場合は進まない（開始30秒間は無効化）
-    if (getSecondsLeft() > 120) {
-      return; 
-    }
+    if (getSecondsLeft() > 120) return; 
     clearInterval(timerInterval); 
     stopRecording();
     await new Promise(r => setTimeout(r, 500));
@@ -306,11 +305,7 @@
   }
 
   async function confirmSubmit() {
-    // 残り時間が2分（120秒）より多い場合は進まない
-    if (getSecondsLeft() > 120) {
-      return;
-    }
-    // ポップアップ(confirm)を完全に廃止し、即座に終了処理へ移行
+    if (getSecondsLeft() > 120) return;
     clearInterval(timerInterval);
     stopRecording();
     await new Promise(r => setTimeout(r, 500));
@@ -340,12 +335,11 @@
       
       document.getElementById('result-title').innerText = `合計得点: ${score} 点 / 60 点`;
 
+      // ★セクションごとの点数を表示する仕様に戻しました
       let detailsHtml = `
         <b>【配点情報】</b><br>
         ・1セクションにつき12点満点<br>
         ・合計60点満点<br>
-        <br>
-        <b>あなたの合格に必要な点数：<span style='color:#e53935; font-size:18px;'>${user.passScore}点</span></b>
         <hr>
         <b>【セクション別得点】</b><br>
       `;
@@ -354,9 +348,15 @@
       }
       document.getElementById('result-details').innerHTML = detailsHtml;
 
-      let msg = score >= user.passScore 
-        ? "<b>【合格】</b>合格です。。" 
-        : "<b>【不合格】</b>残念ですが合格点に達しませんでした。フォーム②の2を回答してください。";
+      let msg = "";
+      // ★シートに応じた合否メッセージの分岐
+      if (user.hasPassFail) {
+        msg = score >= user.passScore 
+          ? `<b>【合格】</b>おめでとうございます。<br>合格基準（${user.passScore}点）をクリアしました。次は「フォーム④」に進んでください。` 
+          : `<b>【不合格】</b>残念ですが合格基準（${user.passScore}点）に達しませんでした。<br>規定の時間を開けて再度受験してください。`;
+      } else {
+        msg = "<b>【採点完了】</b>お疲れ様でした。結果は上記の通りです。";
+      }
       document.getElementById('result-message').innerHTML = msg;
 
     } catch(e) {
