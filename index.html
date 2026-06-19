@@ -159,10 +159,10 @@
         sectionImages = res.images || [];
         const sheet = res.sheetName;
         
-        // 内部判定用の合格ライン（27点）
+        // 内部判定用の合格ライン（30点）
         if (sheet === "既添①" || sheet === "新添①") {
           user.hasPassFail = true;
-          user.passScore = 27; 
+          user.passScore = 30; 
         } else {
           user.hasPassFail = false; 
         }
