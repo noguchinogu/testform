@@ -159,10 +159,10 @@
         sectionImages = res.images || [];
         const sheet = res.sheetName;
         
-        // 内部判定用の合格ライン（30点）
+        // 内部判定用の合格ライン（36点）
         if (sheet === "既添①" || sheet === "新添①") {
           user.hasPassFail = true;
-          user.passScore = 30; 
+          user.passScore = 36; 
         } else {
           user.hasPassFail = false; 
         }
@@ -338,19 +338,22 @@
       
       // ★合否判定ありのユーザー（既添・新添）向けの表示ロジック
       if (user.hasPassFail) {
-        // 合格・不合格に関わらず点数は隠し、指定の配点情報のみを表示
+        // ★得点に応じたフェイクの合格基準（表示用）を決定
+        let displayPassScore = 30;
+        if (score >= 30) {
+          displayPassScore = 36; 
+        }
+
         document.getElementById('result-details').style.display = "block";
         document.getElementById('result-details').innerHTML = `
           <b>【配点情報】</b><br>
           ・1セクションにつき12個の誤り（合計60点満点）<br>
-          ・合格基準：30点以上<br>
+          ・合格基準：${displayPassScore}点以上<br>
         `;
 
-        if (isPassed) {
-          // 合格：フォーム④の話は削除
-          document.getElementById('result-message').innerHTML = `<b>【合格】</b>合格です。<br>※AIによる採点は時々大きなミスがあります。誤って合格と表示された場合、後日リーダーからフォーム②の2を受けるよう、連絡することがありますので、よろしくお願いいたします。`;
-        } else {
-          // 不合格：フォーム②の2への案内を表示
+        if (isPassed) { // 36点以上の場合
+          document.getElementById('result-message').innerHTML = `<b>【合格】</b>おめでとうございます。<br>※AIによる採点は時々大きなミスがあります。誤って合格と表示された場合、後日リーダーからフォーム②の2を受けるよう、連絡することがありますので、よろしくお願いいたします。`;
+        } else { // 35点以下の場合
           document.getElementById('result-message').innerHTML = `<b>【不合格】</b>残念ながら合格基準に達しませんでした。<br>次は「フォーム②の2」に進んでください。`;
         }
       } else {
