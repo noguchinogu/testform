@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>(26)研修フォーム②の1 - 音声入力専用</title>
+  <title>(26)研修フォーム③ - 音声入力専用</title>
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; color: #333; }
     .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
@@ -36,7 +36,7 @@
 <div class="container">
   <div id="auth-view">
     <h2>(26)研修フォーム②の1</h2>
-    <p>フォーム①と同じ内容を入力してください。<br>※このフォームは音声入力限定です。開始時に必ずマイクへのアクセスを許可してください。</p>
+    <p>基本情報と同じ内容を入力してください。<br>※このフォームは音声入力限定です。開始時に必ずマイクへのアクセスを許可してください。</p>
     <input type="text" id="email" placeholder="メールアドレス">
     <input type="text" id="id" placeholder="ID（数字6桁）">
     <input type="text" id="name" placeholder="氏名">
@@ -82,8 +82,8 @@
   </div>
 </div>
 
-<script {nonce}>
-  // ★あなたのGASのURLをここに貼り付けてください
+<script>
+  // ★あなたのGASのURL（フォーム②の1用）をここに貼り付けてください
   const GAS_URL = "https://script.google.com/macros/s/AKfycbyv5I9JelDBF2eLAuRF8rUpkvXHImt2tJPkPxmbQ62pZYTUCbt4SNj_X0bmXZb74ZJz5A/exec"; 
 
   let sectionImages = [];
@@ -159,7 +159,7 @@
         sectionImages = res.images || [];
         const sheet = res.sheetName;
         
-        // 内部判定用の合格ライン（36点）
+        // ★ 内部判定用の真の合格ラインを36点に変更
         if (sheet === "既添①" || sheet === "新添①") {
           user.hasPassFail = true;
           user.passScore = 36; 
@@ -336,8 +336,8 @@
 
       document.getElementById('result-title').innerText = "採点完了";
       
-      // ★合否判定ありのユーザー（既添・新添）向けの表示ロジック
       if (user.hasPassFail) {
+        
         // ★得点に応じたフェイクの合格基準（表示用）を決定
         let displayPassScore = 30;
         if (score >= 30) {
@@ -351,11 +351,14 @@
           ・合格基準：${displayPassScore}点以上<br>
         `;
 
-        if (isPassed) { // 36点以上の場合
-          document.getElementById('result-message').innerHTML = `<b>【合格】</b>おめでとうございます。<br>※AIによる採点は時々大きなミスがあります。誤って合格と表示された場合、後日リーダーからフォーム②の2を受けるよう、連絡することがありますので、よろしくお願いいたします。`;
-        } else { // 35点以下の場合
+        if (isPassed) { 
+          // 36点以上の場合
+          document.getElementById('result-message').innerHTML = `<b>【合格】</b>おめでとうございます。<br>合格基準をクリアしました。`;
+        } else { 
+          // 35点以下の場合
           document.getElementById('result-message').innerHTML = `<b>【不合格】</b>残念ながら合格基準に達しませんでした。<br>次は「フォーム②の2」に進んでください。`;
         }
+
       } else {
         // 合否判定なしのユーザー（既採・新採）向け
         document.getElementById('result-title').innerText = `採点完了: ${score} 点 / 60 点`;
