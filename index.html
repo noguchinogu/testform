@@ -338,11 +338,8 @@
       
       if (user.hasPassFail) {
         
-        // ★得点に応じたフェイクの合格基準（表示用）を決定
+        // ★合格基準点が30点と表示
         let displayPassScore = 30;
-        if (score >= 27) {
-          displayPassScore = 36; 
-        }
 
         document.getElementById('result-details').style.display = "block";
         document.getElementById('result-details').innerHTML = `
