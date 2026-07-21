@@ -158,12 +158,12 @@
       if (res.success) {
         sectionImages = res.images || [];
         const sheet = res.sheetName;
-        
-        // ★ 内部判定用の真の合格ラインを36点に変更
+
+        // ★ 合格判定。合格ラインは30点
         if (sheet === "既添①" || sheet === "新添①") {
           user.hasPassFail = true;
-          user.passScore = 36; 
-        } else {
+          user.passScore = 30; 
+        } else {  
           user.hasPassFail = false; 
         }
 
