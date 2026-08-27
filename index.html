@@ -327,7 +327,7 @@
       if (res.isApiError) {
         document.getElementById('result-title').innerText = "エラー";
         document.getElementById('result-details').style.display = "none";
-        document.getElementById('result-message').innerHTML = "<span style='color:#e53935;'>採点時にエラーが発生しました。<br>所定のフォームから再度お問い合わせください。</span>";
+        document.getElementById('result-message').innerHTML = "<span style='color:#e53935;'>採点時にエラーが起きました。セクション毎に12個誤りがあり、合計30個以上指摘できれば合格です。<br>不合格と考えられる場合はフォーム②の2を受験してください。合格と考えられる場合は所定のフォームから問い合わせてください</span>";
         return;
       }
 
@@ -352,7 +352,7 @@
           let pwHtml = res.pw ? `<br><br><span style="color:#e53935;"><b>【解説用パスワード】: ${res.pw}</b></span>` : "";
           document.getElementById('result-message').innerHTML = `<b>【合格】</b>おめでとうございます。<br>合格基準をクリアしました。${pwHtml}`;
         } else {
-          // 35点以下の場合
+          // 30点以下の場合
           document.getElementById('result-message').innerHTML = `<b>【不合格】</b>残念ながら合格基準に達しませんでした。<br>次は「フォーム②の2」に進んでください。`;
         }
 
